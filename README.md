@@ -1,77 +1,106 @@
-# 基于 RAG 的 Java 面试系统 · 移动端 (UniApp / Android APK)
+# 基于 RAG 的 Java 面试系统 · 移动端 (Android APK)
 
-本工程为原 Web 面试系统的移动客户端，采用 **UniApp (Vue 3 + Pinia)** 框架开发，**完美兼容原有的 Java 后端微服务网关架构，原有后端代码与 Web 前端代码未作任何修改与删除**。
+本工程为原 Web 面试系统的 Android 客户端。整体架构为 **Vue 3 + Vite 构建的单文件 H5**，运行在自研的**原生 WebView 壳**内（Kotlin），由 `build_apk_final.py` 一键编译打包 APK。原有 Java 后端微服务网关架构未做任何修改。
 
----
-
-## 一、系统特性与移动端适配
-
-1. **延续原系统经典设计风格**：
-   - 沿用「墨色工程手册」设计体系（暖纸底 `#F4F1EA`、墨黑 `#131B23`、朱砂红 `#C4432B`）。
-   - 采用移动端手势与触控交互优化、底部五栏 TabBar 导航。
-2. **完整的核心功能移植**：
-   - 📊 **总览大盘 (Dashboard)**：文档量、切片量、题库量、面试场次、平均分、分类分布图、解析状态分布、最近面试记录。
-   - 💬 **智能问答 (Chat / RAG)**：支持 **RAG 知识库问答**（关联原文切片引用、相似度评分）与 **AI 日常对话**（底层原理剖析、思维链、代码示例）双模式切换，多会话管理。
-   - 🎯 **模拟面试考场 (Interview Room)**：支持定制目标岗位、考察难度、专业方向与轮数；AI 面试官根据候选人回答**动态深度追问**与多维即时评分；支持提前结束交卷。
-   - 📈 **面试能力评估报告 (Interview Report)**：环形总分进度、评定等级、**纯 SVG 动态多边形雷达图**（多维能力评测）、核心优势与短板诊断、针对性提升建议及逐题答卷明细。
-   - 📚 **题库自测训练 (Question Bank)**：技术分类标签横向滑动检索、难度筛选、**🎲 随机抽题卡片自测模式**、面试题详情与参考解析、自定义题目录入。
-   - 📁 **文档知识库 (Knowledge Base)**：文档状态监控（待处理、解析中、已完成、失败）、**切片列表预览**、重新解析、本地文档上传（支持 `.md`、`.pdf`）。
-   - ⚙️ **个人中心与服务端网络配置 (User Settings)**：支持管理员/普通用户快速切换、修改密码，以及**在 App 内部动态切换与一键测试后端服务 IP 连通性**。
+当前版本：**v1.0.4（versionCode 104）**
 
 ---
 
-## 二、云端连接与安全组端口说明
+## 一、APK 下载
 
-您服务器 `47.98.190.255` 上的容器部署架构为：
-- **`rag-nginx` (对外端口 81)**：反向代理网关（已在阿里云安全组开放 `81/81` 访问权限）。
-  - `http://47.98.190.255:81/api/` -> 转发至内部 `rag-backend:8081/`
-  - `http://47.98.190.255:81/ai/` -> 转发至大模型接口
-- **`rag-backend` (端口 8081)**：内部后端容器，由 `rag-nginx` 代理，**无需在安全组额外开放 8081**。
+前往 [GitHub Releases](https://github.com/hei1345hei-hub/rag-apk/releases) 下载最新安装包：
 
-移动端 APK 默认已配置连接到：
-```text
-http://47.98.190.255:81/api
+| 版本 | 文件 | 说明 |
+|---|---|---|
+| v1.0.4 | `rag-interview-1.0.4.apk` | 液态玻璃导航 + 热更新支持 |
+
+直接安装到 Android 手机（Android 5.0+）即可使用。
+
+---
+
+## 二、系统特性
+
+### 1. 液态玻璃底部导航（核心特性）
+
+参照 [Kyant0/AndroidLiquidGlass](https://github.com/Kyant0/AndroidLiquidGlass) 与 [SukiSU-Ultra](https://github.com/ShirkNeko/SukiSU-Ultra) 的 FloatingBottomBar 实现的三层玻璃导航：
+
+- **录制层**：页面内容固定于视口、内部滚动，保证折射位移图坐标与导航真实位置对齐；
+- **玻璃层**：`backdrop-filter: blur(4px) saturate(155%)` 做 vibrancy + blur，SVG `feDisplacementMap` 滤镜对胶囊边缘做真实镜头折射与色散；
+- **指示器层**：56dp 高光玻璃胶囊，支持**按住拖动**、松手吸附最近 Tab，按压时带果冻形变与内阴影；
+- 图标层永远在折射之上，保证可读性。
+
+### 2. 完整功能移植
+
+- 📊 **总览大盘 (Dashboard)**：文档量、切片量、题库量、面试场次、平均分、分类分布图、最近面试记录。
+- 💬 **智能问答 (Chat / RAG)**：RAG 知识库问答（原文切片引用、相似度评分）与 AI 日常对话双模式，多会话管理。
+- 🎯 **模拟面试考场 (Interview Room)**：定制岗位、难度、方向与轮数；AI 面试官动态深度追问与多维即时评分。
+- 📈 **能力评估报告 (Report)**：环形总分、纯 SVG 动态雷达图、优势短板诊断、逐题答卷明细。
+- 📚 **题库自测 (Question Bank)**：分类滑动检索、难度筛选、随机抽题卡片自测、自定义题目录入。
+- 📁 **文档知识库 (Knowledge)**：文档状态监控、切片预览、重新解析、本地上传（`.md` / `.pdf`）。
+- ⚙️ **个人中心 (User)**：管理员/普通用户切换、修改密码、App 内动态切换与测试后端 IP。
+
+---
+
+## 三、构建方式
+
+### 前端：Vite 单文件构建
+
+```bash
+npx vite build
 ```
-手机安装 APK 后无论在 4G/5G 还是任意 Wi-Fi 网络下，都能直接与云端后端通信。
+
+产物为 `dist/index.html` —— 所有 JS/CSS 内联的**单文件页面**（约 380KB），由原生壳在 `shouldInterceptRequest` 中本地返回，实现同源加载、无 CORS 限制。
+
+### 原生壳与打包：build_apk_final.py
+
+无需 Gradle / Android Studio，脚本直接调用 Android SDK 工具链（aapt2 / d8 / zipalign / apksigner）编译 Kotlin 源码并签名打包：
+
+```bash
+python build_apk_final.py
+```
+
+- 包名：`com.rag.interview`，minSdk 21 / targetSdk 34
+- 签名：固定 keystore（`keystore/rag-debug.keystore`），保证覆盖安装不换签名
+- 产物：`dist/Java面试系统.apk`
+
+### 热更新（免重装 APK）
+
+APK 内置 WebView 每次启动优先加载 `/sdcard/Android/data/com.rag.interview/files/hot/index.html`（不存在时回退 APK 内置资源）：
+
+```bash
+adb push dist/index.html /sdcard/Android/data/com.rag.interview/files/hot/index.html
+adb shell am force-stop com.rag.interview
+adb shell am start -n com.rag.interview/.MainActivity
+```
+
+纯前端改动无需重新打包 APK，走热更新即可。
 
 ---
 
-## 三、如何打包生成 Android APK
+## 四、云端连接
 
-使用 **HBuilderX** 打包是最简单、稳定且无需在电脑配置复杂 Android SDK 环境的标准途径（官方提供免费云打包）：
+服务器 `47.98.190.255` 容器架构：
 
-### 步骤 1：导入工程至 HBuilderX
-1. 打开 [HBuilderX](https://www.dcloud.io/hbuilderx.html)（若未安装可下载 App 开发版，解压即用）。
-2. 点击顶部菜单：**文件 -> 打开目录**，选择本目录：
-   ```text
-   D:\java\------项目------\基于RAG的Java面试系统\apk前端
-   ```
-3. HBuilderX 将自动识别该工程为 UniApp 项目。
+- **`rag-nginx`（对外端口 81）**：反向代理网关（阿里云安全组已开放 81）
+  - `http://47.98.190.255:81/api/` → 内部 `rag-backend:8081/`
+  - `http://47.98.190.255:81/ai/` → 大模型接口
+- **`rag-backend`（8081）**：内部容器，由 nginx 代理，无需额外开放端口
 
-### 步骤 2：本地运行与真机调试（可选）
-- **运行到内置浏览器 / Chrome 调试**：
-  点击顶部菜单：**运行 -> 运行到浏览器 -> Chrome**。
-- **运行到手机或 Android 模拟器**：
-  电脑开启 Android 模拟器或连接 USB 开启调试模式的真机，点击：**运行 -> 运行到手机或模拟器 -> 运行到 Android App 基座**，即可在手机上实时热重载预览。
-
-### 步骤 3：一键打包生成 APK 安装包
-1. 点击顶部菜单：**发行 -> 原生 App - 云打包**。
-2. 在弹出的打包窗口中进行简单配置：
-   - **App 名字**：`Java面试系统`
-   - **AppId**：点击「获取」或保留默认
-   - **Android 包名**：`com.rag.interview`
-   - **证书选择**：选择 **使用公共测试证书** 或自定义私有证书。
-   - **打包方式**：选择 **安心打包** 或 **传统云打包**。
-3. 点击右下角 **打包** 按钮。
-4. 打包完成后，控制台会自动打印 APK 的下载链接或保存路径，直接安装到安卓手机即可使用！
+APK 默认连接 `http://47.98.190.255:81/api`，4G/5G 与任意 Wi-Fi 下均可直连。
 
 ---
 
-## 四、工程目录结构
+## 五、工程目录结构
 
 ```text
 apk前端/
-├── api/                      # 接口请求层（对接原有 Java 后端网关）
+├── android/                  # 原生 WebView 壳工程 (Kotlin)
+│   └── app/src/main/java/com/rag/interview/
+│       ├── MainActivity.kt           # WebView 宿主：edge-to-edge、120Hz、热更新
+│       ├── AppWebViewClient.kt       # 同源拦截 (/app) + 热文件优先 + file:// 回退
+│       ├── AppChromeClient.kt        # ChromeClient
+│       └── LiquidGlassDockView.kt    # 原生液态玻璃导航 View (实验)
+├── api/                      # 接口请求层（对接 Java 后端网关）
 │   ├── ai.js                 # 大模型直连对话
 │   ├── chat.js               # 智能问答与会话
 │   ├── dashboard.js          # 数据总览看板
@@ -81,34 +110,37 @@ apk前端/
 │   └── user.js               # 用户登录与信息
 ├── components/               # 通用移动端组件
 │   ├── AppModal.vue          # 自定义移动端弹窗
-│   ├── EmptyState.vue        # 空状态占位组件
-│   └── MarkdownView.vue      # 移动端 Markdown 与代码块解析组件
+│   ├── EmptyState.vue        # 空状态占位
+│   └── MarkdownView.vue      # Markdown 与代码块解析
 ├── pages/                    # 页面组件
-│   ├── dashboard/            # [TabBar] 系统总览大盘
-│   ├── chat/                 # [TabBar] 智能问答 (RAG & 日常对话)
-│   ├── interview/            # [TabBar] 模拟面试列表
-│   │   ├── interview.vue     # 面试记录与发起面试
-│   │   ├── room.vue          # 模拟面试实战考场 (AI 动态追问)
-│   │   └── report.vue        # 面试多维能力评估报告 (纯 SVG 雷达图)
-│   ├── question/             # [TabBar] 题库训练与随机自测
-│   ├── knowledge/            # 知识文档库与切片明细预览
-│   ├── user/                 # [TabBar] 个人中心与服务端 IP 配置
-│   └── login/                # 移动端登录与注册
+│   ├── dashboard/            # [Tab] 系统总览大盘
+│   ├── chat/                 # [Tab] 智能问答 (RAG & 日常对话)
+│   ├── interview/            # [Tab] 模拟面试（列表 / room.vue 考场 / report.vue 报告）
+│   ├── question/             # [Tab] 题库训练与随机自测
+│   ├── knowledge/            # 知识文档库与切片预览
+│   ├── user/                 # [Tab] 个人中心与服务端配置
+│   └── login/                # 登录与注册
 ├── static/                   # 静态资源与 TabBar 图标
-│   ├── logo.png              # App 启动与应用图标
-│   └── tabbar/               # 底部导航高亮图标
-├── store/                    # Pinia 状态管理
-│   └── user.js               # 鉴权 Token 与用户信息
-├── styles/                   # 全局样式
-│   └── global.scss           # 墨色工程手册移动端样式规范
-├── utils/                    # 工具函数
-│   ├── config.js             # 服务端网络配置与预设
-│   ├── request.js            # uni.request 封装 (含 Token 与拦截)
-│   └── toast.js              # 移动端消息轻提示
-├── App.vue                   # 根应用生命周期
-├── main.js                   # Vue 3 应用入口
-├── manifest.json             # App 原生打包配置 (权限、包名等)
-├── pages.json                # 路由与 TabBar 声明
-├── uni.scss                  # UniApp 全局 SCSS 变量
-└── vite.config.js            # Vite 构建配置
+├── store/                    # Pinia 状态管理 (鉴权 Token)
+├── styles/global.scss        # 墨色工程手册移动端样式规范
+├── utils/                    # config.js / request.js / toast.js / uni-shim.js
+├── dist/                     # 构建产物
+│   ├── index.html            # 单文件 H5（热更新载体）
+│   └── Java面试系统.apk       # 打包产物
+├── keystore/rag-debug.keystore  # 固定签名证书
+├── App.vue                   # 根组件（液态玻璃导航实现所在）
+├── build_apk_final.py        # 一键打包脚本 (aapt2/d8/apksigner)
+├── vite.config.js            # Vite 单文件构建配置
+└── pages.json                # 路由声明
 ```
+
+---
+
+## 六、本地开发调试
+
+```bash
+npm install        # 安装依赖
+npx vite           # 本地 dev server，浏览器实时预览
+```
+
+真机调试可用 `adb logcat | findstr rag` 查看 WebView 控制台输出。
