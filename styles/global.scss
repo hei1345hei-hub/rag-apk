@@ -1,0 +1,198 @@
+/* ==========================================================================
+   UniApp 移动端全局样式 - 墨色宣纸风
+   暖纸底 / 墨黑字 / 丹砂红 / 细线框 / 印章缀
+   ========================================================================== */
+
+:root {
+  /* 原生层注入真实系统栏高度；24px 为任何机型都不会压到系统栏的兜底值 */
+  --safe-top: 24px;
+  --safe-bottom: 24px;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  background-color: #F4F1EA !important;
+  color: #131B23;
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'HarmonyOS Sans SC', 'Microsoft YaHei', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  overflow-x: hidden;
+}
+
+#app {
+  width: 100%;
+  min-height: 100%;
+  background-color: #F4F1EA !important;
+}
+
+/* 顶部与底部全面屏适配安全区 */
+.safe-top {
+  padding-top: calc(24px + var(--safe-top)) !important;
+}
+
+.safe-bottom {
+  padding-bottom: calc(16px + var(--safe-bottom)) !important;
+}
+
+/* 通用页面布局 - 自适应全面屏顶部状态栏与摄像头开孔 */
+.page-container {
+  box-sizing: border-box;
+  min-height: 100vh;
+  padding: 24rpx;
+  padding-top: calc(18px + var(--safe-top)) !important;
+  padding-bottom: calc(24rpx + var(--safe-bottom)) !important;
+  background-color: #F4F1EA;
+}
+
+.chat-page, .room-page, .report-page {
+  box-sizing: border-box;
+  padding-top: calc(12px + var(--safe-top)) !important;
+}
+
+
+.rag-card {
+  background-color: #FBFAF6;
+  border: 1px solid #D8D2C4;
+  border-radius: 8rpx;
+  padding: 28rpx;
+  margin-bottom: 24rpx;
+  box-shadow: 0 2rpx 8rpx rgba(19, 27, 35, 0.04);
+}
+
+.rag-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20rpx;
+  padding-bottom: 16rpx;
+  border-bottom: 1px dashed #EAE5D9;
+}
+
+.rag-card-title {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: #131B23;
+  display: flex;
+  align-items: center;
+}
+
+/* 编号标签 (如 01, 02) */
+.num-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #131B23;
+  color: #FBFAF6;
+  font-size: 20rpx;
+  font-family: Consolas, monospace;
+  font-weight: bold;
+  padding: 2rpx 10rpx;
+  border-radius: 4rpx;
+  margin-right: 12rpx;
+}
+
+/* 主题按钮 */
+.btn-primary {
+  background-color: #C4432B;
+  color: #FFFFFF;
+  border: 1px solid #9E3320;
+  border-radius: 6rpx;
+  font-size: 28rpx;
+  font-weight: 500;
+  padding: 16rpx 32rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1.4;
+}
+
+.btn-primary:active {
+  background-color: #9E3320;
+}
+
+.btn-secondary {
+  background-color: #FBFAF6;
+  color: #131B23;
+  border: 1px solid #D8D2C4;
+  border-radius: 6rpx;
+  font-size: 28rpx;
+  padding: 16rpx 32rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1.4;
+}
+
+.btn-secondary:active {
+  background-color: #EFEBE2;
+}
+
+.btn-ghost {
+  background: transparent;
+  color: #56646F;
+  border: 1px solid #D8D2C4;
+  border-radius: 6rpx;
+  font-size: 26rpx;
+  padding: 12rpx 24rpx;
+}
+
+.btn-sm {
+  font-size: 24rpx;
+  padding: 8rpx 20rpx;
+}
+
+/* 状态标签徽章 */
+.tag {
+  display: inline-block;
+  font-size: 22rpx;
+  padding: 4rpx 14rpx;
+  border-radius: 4rpx;
+  border: 1px solid transparent;
+  line-height: 1.3;
+}
+
+.tag-red {
+  background-color: #F6E4DF;
+  color: #C4432B;
+  border-color: #EAC4BA;
+}
+
+.tag-teal {
+  background-color: #DFEDEA;
+  color: #2A6B63;
+  border-color: #B5D7D1;
+}
+
+.tag-amber {
+  background-color: #F5EAD4;
+  color: #A9761B;
+  border-color: #E5D3AD;
+}
+
+.tag-slate {
+  background-color: #E8EAEC;
+  color: #5D6B77;
+  border-color: #CED3D7;
+}
+
+.tag-indigo {
+  background-color: #DEE8EF;
+  color: #24506B;
+  border-color: #BED2DF;
+}
+
+/* 文本工具类 */
+.text-ink { color: #131B23; }
+.text-muted { color: #8A959E; }
+.text-dim { color: #AFB7BD; }
+.text-red { color: #C4432B; }
+.text-teal { color: #2A6B63; }
+.text-amber { color: #A9761B; }
+
+.font-mono {
+  font-family: Consolas, 'JetBrains Mono', Courier, monospace;
+}

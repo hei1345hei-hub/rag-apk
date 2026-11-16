@@ -1,0 +1,116 @@
+{
+  "pages": [
+    {
+      "path": "pages/dashboard/dashboard",
+      "style": {
+        "navigationBarTitleText": "系统总览",
+        "enablePullDownRefresh": true
+      }
+    },
+    {
+      "path": "pages/chat/chat",
+      "style": {
+        "navigationBarTitleText": "智能问答",
+        "enablePullDownRefresh": false,
+        "app-plus": {
+          "softinputMode": "adjustResize"
+        }
+      }
+    },
+    {
+      "path": "pages/interview/interview",
+      "style": {
+        "navigationBarTitleText": "模拟面试",
+        "enablePullDownRefresh": true
+      }
+    },
+    {
+      "path": "pages/question/question",
+      "style": {
+        "navigationBarTitleText": "题库训练",
+        "enablePullDownRefresh": true
+      }
+    },
+    {
+      "path": "pages/user/user",
+      "style": {
+        "navigationBarTitleText": "个人中心",
+        "enablePullDownRefresh": false
+      }
+    },
+    {
+      "path": "pages/login/login",
+      "style": {
+        "navigationBarTitleText": "登录 / 注册",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/interview/room",
+      "style": {
+        "navigationBarTitleText": "模拟面试实战",
+        "app-plus": {
+          "softinputMode": "adjustResize"
+        }
+      }
+    },
+    {
+      "path": "pages/interview/report",
+      "style": {
+        "navigationBarTitleText": "面试评估报告",
+        "enablePullDownRefresh": false
+      }
+    },
+    {
+      "path": "pages/knowledge/knowledge",
+      "style": {
+        "navigationBarTitleText": "知识文档库",
+        "enablePullDownRefresh": true
+      }
+    }
+  ],
+  "globalStyle": {
+    "navigationBarTextStyle": "white",
+    "navigationBarTitleText": "Java 面试系统",
+    "navigationBarBackgroundColor": "#131B23",
+    "backgroundColor": "#F4F1EA"
+  },
+  "tabBar": {
+    "color": "#8A959E",
+    "selectedColor": "#C4432B",
+    "backgroundColor": "#FBFAF6",
+    "borderStyle": "black",
+    "list": [
+      {
+        "pagePath": "pages/dashboard/dashboard",
+        "text": "总览",
+        "iconPath": "static/tabbar/home.png",
+        "selectedIconPath": "static/tabbar/home-active.png"
+      },
+      {
+        "pagePath": "pages/chat/chat",
+        "text": "问答",
+        "iconPath": "static/tabbar/chat.png",
+        "selectedIconPath": "static/tabbar/chat-active.png"
+      },
+      {
+        "pagePath": "pages/interview/interview",
+        "text": "面试",
+        "iconPath": "static/tabbar/interview.png",
+        "selectedIconPath": "static/tabbar/interview-active.png"
+      },
+      {
+        "pagePath": "pages/question/question",
+        "text": "题库",
+        "iconPath": "static/tabbar/question.png",
+        "selectedIconPath": "static/tabbar/question-active.png"
+      },
+      {
+        "pagePath": "pages/user/user",
+        "text": "我的",
+        "iconPath": "static/tabbar/user.png",
+        "selectedIconPath": "static/tabbar/user-active.png"
+      }
+    ]
+  }
+}

@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>Java 面试系统</title>
+    <style>
+      /* 全面屏安全区：原生层会在页面加载后写入真实高度，
+         这里的 24px 是保证任何情况下都不会与系统栏重叠的兜底值 */
+      :root {
+        --safe-top: 24px;
+        --safe-bottom: 24px;
+      }
+      html, body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        min-height: 100%;
+        background-color: #F4F1EA !important;
+        -webkit-tap-highlight-color: transparent;
+      }
+      #app {
+        width: 100%;
+        min-height: 100%;
+        background-color: #F4F1EA !important;
+      }
+      .app-splash-init {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        background-color: #F4F1EA;
+        font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'HarmonyOS Sans SC', sans-serif;
+      }
+      .app-splash-spinner {
+        width: 38px;
+        height: 38px;
+        border: 3px solid #D8D2C4;
+        border-top-color: #C4432B;
+        border-radius: 50%;
+        animation: splash-spin 0.8s linear infinite;
+        margin-bottom: 16px;
+      }
+      @keyframes splash-spin {
+        to { transform: rotate(360deg); }
+      }
+      .app-splash-text {
+        color: #8A959E;
+        font-size: 14px;
+        font-weight: 500;
+        letter-spacing: 1px;
+      }
+      #debug-err {
+        display: none;
+        margin-top: 16px;
+        padding: 10px 16px;
+        background: #FEE2E2;
+        color: #991B1B;
+        border-radius: 6px;
+        font-size: 12px;
+        max-width: 80%;
+        word-break: break-all;
+      }
+    </style>
+    <script>
+      window.addEventListener('error', function(e) {
+        var msg = (e && e.message) ? e.message : (e && e.target && e.target.src ? ('资源加载失败: ' + e.target.src) : '脚本加载异常');
+        console.error('JS Error:', msg);
+        var errBox = document.getElementById('debug-err');
+        if (errBox) {
+          errBox.style.display = 'block';
+          errBox.innerText = msg;
+        }
+      }, true);
+
+      window.addEventListener('unhandledrejection', function(e) {
+        var reason = e.reason ? (e.reason.message || e.reason.stack || String(e.reason)) : '异步执行异常';
+        console.error('Unhandled Rejection:', reason);
+        var errBox = document.getElementById('debug-err');
+        if (errBox) {
+          errBox.style.display = 'block';
+          errBox.innerText = 'Promise异常: ' + reason;
+        }
+      });
+    </script>
+  </head>
+  <body>
+    <div id="app">
+      <div class="app-splash-init">
+        <div class="app-splash-spinner"></div>
+        <div class="app-splash-text">Java 面试系统加载中...</div>
+        <div id="debug-err"></div>
+      </div>
+    </div>
+    <script type="module" src="/main.js"></script>
+  </body>
+</html>

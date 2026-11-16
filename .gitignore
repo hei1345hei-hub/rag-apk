@@ -1,0 +1,14 @@
+node_modules/
+dist/.vite/
+*.log
+scratch_cdp.py
+test_lens_live.py
+
+# Android / Gradle 构建产物
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.idea/
+android/captures/
+*.apk.idsig
