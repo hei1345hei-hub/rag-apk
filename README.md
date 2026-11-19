@@ -12,10 +12,10 @@ APK 安装包统一在 **GitHub Releases** 托管分发（源码仓库保持纯�
 
 👉 **[前往 GitHub Releases v2.0.0 页面下载 APK](https://github.com/hei1345hei-hub/rag-apk/releases/tag/v2.0.0)**
 
-| 发布版本 | 附件下载 | 文件大小 | 架构特性 |
+| 版本 | 安装包文件 | 说明 | 架构 |
 |---|---|---|---|
-| **v2.0.0** (最新版) | [`Java-Interview-System-v2.0.0.apk`](https://github.com/hei1345hei-hub/rag-apk/releases/download/v2.0.0/Java-Interview-System-v2.0.0.apk) | 12.0 MB | **纯原生 Jetpack Compose + Kyant 液态玻璃 + 知识库解析** |
-| **v2.0.0** (英文命名) | [`rag-interview-2.0.0.apk`](https://github.com/hei1345hei-hub/rag-apk/releases/download/v2.0.0/rag-interview-2.0.0.apk) | 12.0 MB | 英文镜像包 |
+| **v2.0.0** (当前最新版) | [`rag-interview-2.0.0.apk`](https://github.com/hei1345hei-hub/rag-apk/releases/download/v2.0.0/rag-interview-2.0.0.apk) | 12.0 MB · 完整知识库与滑屏优化 | **纯原生 Jetpack Compose + Kyant 液态玻璃** |
+| **v1.0.4** (历史旧版本) | [`rag-interview-1.0.4.apk`](https://github.com/hei1345hei-hub/rag-apk/releases/download/v1.0.4/rag-interview-1.0.4.apk) | 11.2 MB · 历史混合架构版 | Vue 3 + 原生 WebView 壳 |
 
 直接安装到 Android 手机（Android 8.0+，支持 Android 13/14 120Hz 高刷）即可即开即用。
 
