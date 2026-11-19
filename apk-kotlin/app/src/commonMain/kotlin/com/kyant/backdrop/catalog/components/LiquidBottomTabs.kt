@@ -103,7 +103,7 @@ fun LiquidBottomTabs(
                 valueRange = 0f..(tabsCount - 1).toFloat(),
                 visibilityThreshold = 0.001f,
                 initialScale = 1f,
-                pressedScale = 78f / 56f,
+                pressedScale = 82f / 56f,
                 onDragStarted = {},
                 onDragStopped = {
                     val targetIndex = targetValue.fastRoundToInt().fastCoerceIn(0, tabsCount - 1)
@@ -112,7 +112,7 @@ fun LiquidBottomTabs(
                     animationScope.launch {
                         offsetAnimation.animateTo(
                             0f,
-                            spring(1f, 300f, 0.5f)
+                            spring(0.55f, 300f, 0.5f)
                         )
                     }
                 },
@@ -258,8 +258,8 @@ fun LiquidBottomTabs(
                         scaleX = dampedDragAnimation.scaleX
                         scaleY = dampedDragAnimation.scaleY
                         val velocity = dampedDragAnimation.velocity / 10f
-                        scaleX /= 1f - (velocity * 0.75f).fastCoerceIn(-0.2f, 0.2f)
-                        scaleY *= 1f - (velocity * 0.25f).fastCoerceIn(-0.2f, 0.2f)
+                        scaleX /= 1f - (velocity * 0.75f).fastCoerceIn(-0.25f, 0.25f)
+                        scaleY *= 1f - (velocity * 0.25f).fastCoerceIn(-0.25f, 0.25f)
                     },
                     onDrawSurface = {
                         val progress = dampedDragAnimation.pressProgress
