@@ -88,3 +88,54 @@ data class KnowledgeStats(
     val parsing: Int = 0,
     val failed: Int = 0
 )
+
+data class InterviewSession(
+    val id: Long,
+    val position: String,
+    val level: String,
+    val category: String? = null,
+    val docId: Long? = null,
+    val docName: String? = null,
+    val roundTotal: Int = 5,
+    val roundDone: Int = 0,
+    val status: Int = 0, // 0: 进行中, 1: 已结束
+    val totalScore: Int? = null,
+    val startTime: String? = null,
+    val endTime: String? = null,
+    val qaList: List<InterviewQA> = emptyList()
+)
+
+data class InterviewQA(
+    val id: Long? = null,
+    val roundNo: Int,
+    val question: String,
+    val answer: String? = null,
+    val score: Int? = null,
+    val comment: String? = null,
+    val answerTime: String? = null
+)
+
+data class InterviewReportData(
+    val sessionId: Long,
+    val totalScore: Int = 80,
+    val grade: String = "良好",
+    val summary: String = "",
+    val strengths: String = "",
+    val weaknesses: String = "",
+    val suggestion: String = "",
+    val dimScores: Map<String, Int> = emptyMap()
+)
+
+data class ChatSessionItem(
+    val id: Long,
+    val title: String,
+    val sessionType: String = "RAG", // "RAG" or "CHAT"
+    val createTime: String = "",
+    val messageCount: Int = 0
+)
+
+data class QuestionStatsData(
+    val total: Int = 0,
+    val byCategory: List<Pair<String, Int>> = emptyList(),
+    val byDifficulty: Map<String, Int> = emptyMap()
+)

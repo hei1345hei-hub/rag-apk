@@ -24,6 +24,23 @@ object InterviewApi {
     var knowledgeDocList by mutableStateOf<List<KnowledgeDoc>>(emptyList())
     var isLoadingKnowledge by mutableStateOf(false)
 
+    // Interview Management states
+    var interviewSessions by mutableStateOf<List<InterviewSession>>(emptyList())
+    var isLoadingInterviews by mutableStateOf(false)
+    var currentInterviewSession by mutableStateOf<InterviewSession?>(null)
+    var currentReportData by mutableStateOf<InterviewReportData?>(null)
+
+    // Chat Management states
+    var chatSessions by mutableStateOf<List<ChatSessionItem>>(emptyList())
+    var currentChatSessionId by mutableStateOf<Long?>(null)
+    var currentChatMode by mutableStateOf("RAG") // "RAG" or "CHAT"
+    var selectedChatDocId by mutableStateOf<Long?>(null)
+    var isLoadingChatSessions by mutableStateOf(false)
+
+    // Question Bank states
+    var randomQuizQuestions by mutableStateOf<List<QuestionItem>>(emptyList())
+    var isLoadingQuiz by mutableStateOf(false)
+
     suspend fun login(username: String, pass: String): Boolean {
         return try {
             val (newToken, info) = HttpPlatform.login(baseUrl, username, pass)
@@ -142,5 +159,175 @@ object InterviewApi {
 
     suspend fun getChunks(docId: Long): List<DocChunk> {
         return HttpPlatform.fetchDocumentChunks(baseUrl, token, docId)
+    }
+
+    // -------------------------------------------------------------
+    // Interview Session Methods
+    // -------------------------------------------------------------
+    suspend fun refreshInterviewSessions(status: Int? = null): List<InterviewSession> {
+        isLoadingInterviews = true
+        return try {
+            val (_, list) = HttpPlatform.fetchInterviewSessions(baseUrl, token, 1, 20, status)
+            interviewSessions = list
+            list
+        } catch (_: Exception) {
+            interviewSessions
+        } finally {
+            isLoadingInterviews = false
+        }
+    }
+
+    suspend fun startNewInterview(
+        position: String,
+        level: String,
+        category: String?,
+        roundTotal: Int,
+        docId: Long? = null,
+        docName: String? = null
+    ): Triple<Long, String, Int>? {
+        val result = HttpPlatform.createInterviewSession(baseUrl, token, position, level, category, roundTotal, docId, docName)
+        if (result != null) {
+            refreshInterviewSessions()
+            refreshStats()
+        }
+        return result
+    }
+
+    suspend fun fetchInterviewDetail(sessionId: Long): InterviewSession? {
+        val detail = HttpPlatform.fetchInterviewDetail(baseUrl, token, sessionId)
+        if (detail != null) {
+            currentInterviewSession = detail
+        }
+        return detail
+    }
+
+    suspend fun answerInterviewRound(sessionId: Long, roundNo: Int, answer: String): Pair<Int, String>? {
+        return HttpPlatform.submitInterviewAnswer(baseUrl, token, sessionId, roundNo, answer)
+    }
+
+    suspend fun nextInterviewQuestion(sessionId: Long): Pair<Int, String>? {
+        return HttpPlatform.fetchNextInterviewQuestion(baseUrl, token, sessionId)
+    }
+
+    suspend fun finishInterview(sessionId: Long): InterviewReportData? {
+        val rep = HttpPlatform.finishInterviewSession(baseUrl, token, sessionId)
+        currentReportData = rep
+        refreshInterviewSessions()
+        refreshStats()
+        return rep
+    }
+
+    suspend fun loadInterviewReport(sessionId: Long): InterviewReportData? {
+        val rep = HttpPlatform.fetchInterviewReport(baseUrl, token, sessionId)
+        currentReportData = rep
+        return rep
+    }
+
+    suspend fun deleteInterview(sessionId: Long): Boolean {
+        val ok = HttpPlatform.deleteInterviewSession(baseUrl, token, sessionId)
+        if (ok) {
+            refreshInterviewSessions()
+            refreshStats()
+        }
+        return ok
+    }
+
+    // -------------------------------------------------------------
+    // Chat Session Methods
+    // -------------------------------------------------------------
+    suspend fun refreshChatSessions(sessionType: String = currentChatMode): List<ChatSessionItem> {
+        isLoadingChatSessions = true
+        return try {
+            val list = HttpPlatform.fetchChatSessions(baseUrl, token, sessionType)
+            chatSessions = list
+            if (currentChatSessionId == null && list.isNotEmpty()) {
+                currentChatSessionId = list[0].id
+            }
+            list
+        } catch (_: Exception) {
+            chatSessions
+        } finally {
+            isLoadingChatSessions = false
+        }
+    }
+
+    suspend fun createNewChatSession(title: String? = null, sessionType: String = currentChatMode): ChatSessionItem? {
+        val item = HttpPlatform.createChatSession(baseUrl, token, title, sessionType)
+        if (item != null) {
+            currentChatSessionId = item.id
+            refreshChatSessions(sessionType)
+        }
+        return item
+    }
+
+    suspend fun loadChatMessages(sessionId: Long): List<ChatMessage> {
+        return HttpPlatform.fetchChatMessages(baseUrl, token, sessionId)
+    }
+
+    suspend fun deleteChatSession(sessionId: Long): Boolean {
+        val ok = HttpPlatform.deleteChatSession(baseUrl, token, sessionId)
+        if (ok) {
+            if (currentChatSessionId == sessionId) currentChatSessionId = null
+            refreshChatSessions()
+        }
+        return ok
+    }
+
+    suspend fun sendChatMessageEx(question: String, docId: Long? = selectedChatDocId, topK: Int = 3): Triple<Long, String, List<DocRef>> {
+        val result = HttpPlatform.sendChatQuestionEx(baseUrl, token, currentChatSessionId, question, topK, docId)
+        if (currentChatSessionId == null && result.first > 0) {
+            currentChatSessionId = result.first
+            refreshChatSessions()
+        }
+        return result
+    }
+
+    // -------------------------------------------------------------
+    // Question Bank Random Quiz & CRUD
+    // -------------------------------------------------------------
+    suspend fun loadRandomQuiz(category: String? = null, count: Int = 5): List<QuestionItem> {
+        isLoadingQuiz = true
+        return try {
+            val list = HttpPlatform.fetchRandomQuestions(baseUrl, token, category, count)
+            randomQuizQuestions = list
+            list
+        } catch (_: Exception) {
+            randomQuizQuestions
+        } finally {
+            isLoadingQuiz = false
+        }
+    }
+
+    suspend fun addQuestion(title: String, answer: String, category: String, difficulty: Int, tags: String): Boolean {
+        val ok = HttpPlatform.addQuestion(baseUrl, token, title, answer, category, difficulty, tags)
+        if (ok) {
+            refreshQuestions()
+            refreshStats()
+        }
+        return ok
+    }
+
+    suspend fun deleteQuestion(id: Int): Boolean {
+        val ok = HttpPlatform.deleteQuestion(baseUrl, token, id)
+        if (ok) {
+            refreshQuestions()
+            refreshStats()
+        }
+        return ok
+    }
+
+    // -------------------------------------------------------------
+    // User Profile & Password
+    // -------------------------------------------------------------
+    suspend fun changePassword(oldPass: String, newPass: String): Pair<Boolean, String> {
+        return HttpPlatform.changePassword(baseUrl, token, oldPass, newPass)
+    }
+
+    suspend fun updateUserProfile(nickname: String, email: String): Boolean {
+        val ok = HttpPlatform.updateUserInfo(baseUrl, token, nickname, email)
+        if (ok) {
+            currentUser = currentUser.copy(nickname = nickname, email = email)
+        }
+        return ok
     }
 }

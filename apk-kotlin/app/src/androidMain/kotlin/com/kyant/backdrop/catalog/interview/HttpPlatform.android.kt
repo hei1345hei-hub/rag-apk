@@ -659,6 +659,582 @@ actual object HttpPlatform {
         }
     }
 
+    // ---------------------------------------------------------
+    // Interview APIs
+    // ---------------------------------------------------------
+    actual suspend fun fetchInterviewSessions(
+        baseUrl: String,
+        token: String?,
+        pageNum: Int,
+        pageSize: Int,
+        status: Int?
+    ): Pair<Int, List<InterviewSession>> = withContext(Dispatchers.IO) {
+        try {
+            val headers = mutableMapOf<String, String>()
+            if (!token.isNullOrBlank()) headers["Authorization"] = "Bearer $token"
+            val statusParam = if (status != null) "&status=$status" else ""
+            val resp = rawRequest("GET", "$baseUrl/interview/sessions?pageNum=$pageNum&pageSize=$pageSize$statusParam", headers)
+            val json = JSONObject(resp)
+            if (json.optInt("code") == 200) {
+                val data = json.optJSONObject("data")
+                val total = data?.optInt("total", 0) ?: 0
+                val listArr = data?.optJSONArray("list")
+                val list = mutableListOf<InterviewSession>()
+                if (listArr != null) {
+                    for (i in 0 until listArr.length()) {
+                        val o = listArr.getJSONObject(i)
+                        list.add(parseInterviewSession(o))
+                    }
+                }
+                return@withContext total to list
+            }
+            0 to emptyList()
+        } catch (_: Exception) {
+            0 to emptyList()
+        }
+    }
+
+    actual suspend fun createInterviewSession(
+        baseUrl: String,
+        token: String?,
+        position: String,
+        level: String,
+        category: String?,
+        roundTotal: Int,
+        docId: Long?,
+        docName: String?
+    ): Triple<Long, String, Int>? = withContext(Dispatchers.IO) {
+        try {
+            val headers = mutableMapOf("Content-Type" to "application/json")
+            if (!token.isNullOrBlank()) headers["Authorization"] = "Bearer $token"
+            val payload = JSONObject().apply {
+                put("position", position)
+                put("level", level)
+                if (!category.isNullOrBlank()) put("category", category)
+                if (docId != null) put("docId", docId)
+                if (!docName.isNullOrBlank()) put("docName", docName)
+                put("roundTotal", roundTotal)
+            }.toString()
+
+            val resp = rawRequest("POST", "$baseUrl/interview/sessions", headers, payload)
+            val json = JSONObject(resp)
+            if (json.optInt("code") == 200) {
+                val data = json.optJSONObject("data")
+                if (data != null) {
+                    val id = data.optLong("id")
+                    val q = data.optString("question")
+                    val roundNo = data.optInt("roundNo", 1)
+                    return@withContext Triple(id, q, roundNo)
+                }
+            }
+            null
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    actual suspend fun fetchInterviewDetail(
+        baseUrl: String,
+        token: String?,
+        sessionId: Long
+    ): InterviewSession? = withContext(Dispatchers.IO) {
+        try {
+            val headers = mutableMapOf<String, String>()
+            if (!token.isNullOrBlank()) headers["Authorization"] = "Bearer $token"
+            val resp = rawRequest("GET", "$baseUrl/interview/sessions/$sessionId", headers)
+            val json = JSONObject(resp)
+            if (json.optInt("code") == 200) {
+                val data = json.optJSONObject("data")
+                if (data != null) return@withContext parseInterviewSession(data)
+            }
+            null
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    actual suspend fun submitInterviewAnswer(
+        baseUrl: String,
+        token: String?,
+        sessionId: Long,
+        roundNo: Int,
+        answer: String
+    ): Pair<Int, String>? = withContext(Dispatchers.IO) {
+        try {
+            val headers = mutableMapOf("Content-Type" to "application/json")
+            if (!token.isNullOrBlank()) headers["Authorization"] = "Bearer $token"
+            val payload = JSONObject().apply {
+                put("roundNo", roundNo)
+                put("answer", answer)
+            }.toString()
+
+            val resp = rawRequest("POST", "$baseUrl/interview/sessions/$sessionId/answer", headers, payload)
+            val json = JSONObject(resp)
+            if (json.optInt("code") == 200) {
+                val data = json.optJSONObject("data")
+                if (data != null) {
+                    val score = data.optInt("score", 80)
+                    val comment = data.optString("comment", "回答良好")
+                    return@withContext score to comment
+                }
+            }
+            null
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    actual suspend fun fetchNextInterviewQuestion(
+        baseUrl: String,
+        token: String?,
+        sessionId: Long
+    ): Pair<Int, String>? = withContext(Dispatchers.IO) {
+        try {
+            val headers = mutableMapOf<String, String>()
+            if (!token.isNullOrBlank()) headers["Authorization"] = "Bearer $token"
+            val resp = rawRequest("POST", "$baseUrl/interview/sessions/$sessionId/next-question", headers, "{}")
+            val json = JSONObject(resp)
+            if (json.optInt("code") == 200) {
+                val data = json.optJSONObject("data")
+                if (data != null) {
+                    val roundNo = data.optInt("roundNo", 1)
+                    val q = data.optString("question", "")
+                    return@withContext roundNo to q
+                }
+            }
+            null
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    actual suspend fun finishInterviewSession(
+        baseUrl: String,
+        token: String?,
+        sessionId: Long
+    ): InterviewReportData? = withContext(Dispatchers.IO) {
+        try {
+            val headers = mutableMapOf<String, String>()
+            if (!token.isNullOrBlank()) headers["Authorization"] = "Bearer $token"
+            val resp = rawRequest("POST", "$baseUrl/interview/sessions/$sessionId/finish", headers, "{}")
+            val json = JSONObject(resp)
+            if (json.optInt("code") == 200) {
+                val data = json.optJSONObject("data")
+                if (data != null) return@withContext parseReportData(data, sessionId)
+            }
+            fetchInterviewReport(baseUrl, token, sessionId)
+        } catch (_: Exception) {
+            fetchInterviewReport(baseUrl, token, sessionId)
+        }
+    }
+
+    actual suspend fun fetchInterviewReport(
+        baseUrl: String,
+        token: String?,
+        sessionId: Long
+    ): InterviewReportData? = withContext(Dispatchers.IO) {
+        try {
+            val headers = mutableMapOf<String, String>()
+            if (!token.isNullOrBlank()) headers["Authorization"] = "Bearer $token"
+            val resp = rawRequest("GET", "$baseUrl/interview/sessions/$sessionId/report", headers)
+            val json = JSONObject(resp)
+            if (json.optInt("code") == 200) {
+                val data = json.optJSONObject("data")
+                if (data != null) return@withContext parseReportData(data, sessionId)
+            }
+            null
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    actual suspend fun deleteInterviewSession(
+        baseUrl: String,
+        token: String?,
+        sessionId: Long
+    ): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val headers = mutableMapOf<String, String>()
+            if (!token.isNullOrBlank()) headers["Authorization"] = "Bearer $token"
+            val resp = rawRequest("DELETE", "$baseUrl/interview/sessions/$sessionId", headers)
+            JSONObject(resp).optInt("code") == 200
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    // ---------------------------------------------------------
+    // Chat Session APIs
+    // ---------------------------------------------------------
+    actual suspend fun fetchChatSessions(
+        baseUrl: String,
+        token: String?,
+        sessionType: String
+    ): List<ChatSessionItem> = withContext(Dispatchers.IO) {
+        try {
+            val headers = mutableMapOf<String, String>()
+            if (!token.isNullOrBlank()) headers["Authorization"] = "Bearer $token"
+            val resp = rawRequest("GET", "$baseUrl/chat/sessions?sessionType=$sessionType", headers)
+            val json = JSONObject(resp)
+            if (json.optInt("code") == 200) {
+                val arr = json.optJSONArray("data")
+                val list = mutableListOf<ChatSessionItem>()
+                if (arr != null) {
+                    for (i in 0 until arr.length()) {
+                        val o = arr.getJSONObject(i)
+                        list.add(
+                            ChatSessionItem(
+                                id = o.optLong("id"),
+                                title = o.optString("title", "对话"),
+                                sessionType = o.optString("sessionType", sessionType),
+                                createTime = o.optString("createTime", ""),
+                                messageCount = o.optInt("messageCount", 0)
+                            )
+                        )
+                    }
+                }
+                return@withContext list
+            }
+            emptyList()
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    actual suspend fun createChatSession(
+        baseUrl: String,
+        token: String?,
+        title: String?,
+        sessionType: String
+    ): ChatSessionItem? = withContext(Dispatchers.IO) {
+        try {
+            val headers = mutableMapOf("Content-Type" to "application/json")
+            if (!token.isNullOrBlank()) headers["Authorization"] = "Bearer $token"
+            val payload = JSONObject().apply {
+                if (!title.isNullOrBlank()) put("title", title)
+                put("sessionType", sessionType)
+            }.toString()
+
+            val resp = rawRequest("POST", "$baseUrl/chat/sessions", headers, payload)
+            val json = JSONObject(resp)
+            if (json.optInt("code") == 200) {
+                val o = json.optJSONObject("data")
+                if (o != null) {
+                    return@withContext ChatSessionItem(
+                        id = o.optLong("id"),
+                        title = o.optString("title", title ?: "新对话"),
+                        sessionType = o.optString("sessionType", sessionType),
+                        createTime = o.optString("createTime", "")
+                    )
+                }
+            }
+            null
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    actual suspend fun fetchChatMessages(
+        baseUrl: String,
+        token: String?,
+        sessionId: Long
+    ): List<ChatMessage> = withContext(Dispatchers.IO) {
+        try {
+            val headers = mutableMapOf<String, String>()
+            if (!token.isNullOrBlank()) headers["Authorization"] = "Bearer $token"
+            val resp = rawRequest("GET", "$baseUrl/chat/sessions/$sessionId/messages", headers)
+            val json = JSONObject(resp)
+            if (json.optInt("code") == 200) {
+                val arr = json.optJSONArray("data")
+                val list = mutableListOf<ChatMessage>()
+                if (arr != null) {
+                    for (i in 0 until arr.length()) {
+                        val o = arr.getJSONObject(i)
+                        val role = o.optString("role", "user")
+                        val refsList = mutableListOf<DocRef>()
+                        val refsArr = o.optJSONArray("refs")
+                        if (refsArr != null) {
+                            for (j in 0 until refsArr.length()) {
+                                val ro = refsArr.getJSONObject(j)
+                                refsList.add(
+                                    DocRef(
+                                        docName = ro.optString("docName", "知识库文档"),
+                                        snippet = ro.optString("snippet", ro.optString("content", "")),
+                                        score = ro.optDouble("score", 0.85)
+                                    )
+                                )
+                            }
+                        }
+                        list.add(
+                            ChatMessage(
+                                id = "msg-${o.optLong("id", i.toLong())}",
+                                isUser = role == "user",
+                                content = o.optString("content", ""),
+                                refs = refsList,
+                                timestamp = o.optString("createTime", "")
+                            )
+                        )
+                    }
+                }
+                return@withContext list
+            }
+            emptyList()
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    actual suspend fun deleteChatSession(
+        baseUrl: String,
+        token: String?,
+        sessionId: Long
+    ): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val headers = mutableMapOf<String, String>()
+            if (!token.isNullOrBlank()) headers["Authorization"] = "Bearer $token"
+            val resp = rawRequest("DELETE", "$baseUrl/chat/sessions/$sessionId", headers)
+            JSONObject(resp).optInt("code") == 200
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    actual suspend fun sendChatQuestionEx(
+        baseUrl: String,
+        token: String?,
+        sessionId: Long?,
+        question: String,
+        topK: Int,
+        docId: Long?
+    ): Triple<Long, String, List<DocRef>> = withContext(Dispatchers.IO) {
+        try {
+            val headers = mutableMapOf("Content-Type" to "application/json")
+            if (!token.isNullOrBlank()) headers["Authorization"] = "Bearer $token"
+            val payload = JSONObject().apply {
+                if (sessionId != null && sessionId > 0) put("sessionId", sessionId)
+                put("question", question)
+                put("topK", topK)
+                if (docId != null && docId > 0) put("docId", docId)
+            }.toString()
+
+            val resp = rawRequest("POST", "$baseUrl/chat/ask", headers, payload)
+            val json = JSONObject(resp)
+            if (json.optInt("code") == 200) {
+                val data = json.optJSONObject("data")
+                val sId = data?.optLong("sessionId", sessionId ?: 0L) ?: (sessionId ?: 0L)
+                val answer = data?.optString("answer", "") ?: ""
+                val refs = mutableListOf<DocRef>()
+                val refsArr = data?.optJSONArray("refs")
+                if (refsArr != null) {
+                    for (i in 0 until refsArr.length()) {
+                        val ro = refsArr.getJSONObject(i)
+                        refs.add(
+                            DocRef(
+                                docName = ro.optString("docName", "知识库文档"),
+                                snippet = ro.optString("snippet", ro.optString("content", "")),
+                                score = ro.optDouble("score", 0.85)
+                            )
+                        )
+                    }
+                }
+                return@withContext Triple(sId, answer, refs)
+            }
+            val (ans, refs) = generateIntelligentRagAnswer(question)
+            Triple(sessionId ?: 0L, ans, refs)
+        } catch (_: Exception) {
+            val (ans, refs) = generateIntelligentRagAnswer(question)
+            Triple(sessionId ?: 0L, ans, refs)
+        }
+    }
+
+    // ---------------------------------------------------------
+    // Question Bank APIs
+    // ---------------------------------------------------------
+    actual suspend fun fetchRandomQuestions(
+        baseUrl: String,
+        token: String?,
+        category: String?,
+        count: Int
+    ): List<QuestionItem> = withContext(Dispatchers.IO) {
+        try {
+            val headers = mutableMapOf<String, String>()
+            if (!token.isNullOrBlank()) headers["Authorization"] = "Bearer $token"
+            val catParam = if (!category.isNullOrBlank() && category != "全部") "&category=" + URLEncoder.encode(category, "UTF-8") else ""
+            val resp = rawRequest("GET", "$baseUrl/question/random?count=$count$catParam", headers)
+            val json = JSONObject(resp)
+            if (json.optInt("code") == 200) {
+                val arr = json.optJSONArray("data")
+                val list = mutableListOf<QuestionItem>()
+                if (arr != null) {
+                    for (i in 0 until arr.length()) {
+                        val o = arr.getJSONObject(i)
+                        list.add(
+                            QuestionItem(
+                                id = o.optInt("id", i + 1),
+                                title = o.optString("title", ""),
+                                answer = o.optString("answer", ""),
+                                category = o.optString("category", "Java基础"),
+                                difficulty = o.optInt("difficulty", 2),
+                                tags = o.optString("tags", ""),
+                                frequency = o.optInt("frequency", 100)
+                            )
+                        )
+                    }
+                }
+                if (list.isNotEmpty()) return@withContext list
+            }
+            fallbackQuestions(category)
+        } catch (_: Exception) {
+            fallbackQuestions(category)
+        }
+    }
+
+    actual suspend fun addQuestion(
+        baseUrl: String,
+        token: String?,
+        title: String,
+        answer: String,
+        category: String,
+        difficulty: Int,
+        tags: String
+    ): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val headers = mutableMapOf("Content-Type" to "application/json")
+            if (!token.isNullOrBlank()) headers["Authorization"] = "Bearer $token"
+            val payload = JSONObject().apply {
+                put("title", title)
+                put("answer", answer)
+                put("category", category)
+                put("difficulty", difficulty)
+                put("tags", tags)
+            }.toString()
+
+            val resp = rawRequest("POST", "$baseUrl/question", headers, payload)
+            JSONObject(resp).optInt("code") == 200
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    actual suspend fun deleteQuestion(
+        baseUrl: String,
+        token: String?,
+        id: Int
+    ): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val headers = mutableMapOf<String, String>()
+            if (!token.isNullOrBlank()) headers["Authorization"] = "Bearer $token"
+            val resp = rawRequest("DELETE", "$baseUrl/question/$id", headers)
+            JSONObject(resp).optInt("code") == 200
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    // ---------------------------------------------------------
+    // User Profile APIs
+    // ---------------------------------------------------------
+    actual suspend fun changePassword(
+        baseUrl: String,
+        token: String?,
+        oldPass: String,
+        newPass: String
+    ): Pair<Boolean, String> = withContext(Dispatchers.IO) {
+        try {
+            val headers = mutableMapOf("Content-Type" to "application/json")
+            if (!token.isNullOrBlank()) headers["Authorization"] = "Bearer $token"
+            val payload = JSONObject().apply {
+                put("oldPassword", oldPass)
+                put("newPassword", newPass)
+            }.toString()
+
+            val resp = rawRequest("PUT", "$baseUrl/user/password", headers, payload)
+            val json = JSONObject(resp)
+            (json.optInt("code") == 200) to json.optString("message", if (json.optInt("code") == 200) "密码修改成功" else "原密码错误")
+        } catch (e: Exception) {
+            false to (e.message ?: "网络通信异常")
+        }
+    }
+
+    actual suspend fun updateUserInfo(
+        baseUrl: String,
+        token: String?,
+        nickname: String,
+        email: String
+    ): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val headers = mutableMapOf("Content-Type" to "application/json")
+            if (!token.isNullOrBlank()) headers["Authorization"] = "Bearer $token"
+            val payload = JSONObject().apply {
+                put("nickname", nickname)
+                put("email", email)
+            }.toString()
+
+            val resp = rawRequest("PUT", "$baseUrl/user/info", headers, payload)
+            JSONObject(resp).optInt("code") == 200
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun parseInterviewSession(o: JSONObject): InterviewSession {
+        val qaList = mutableListOf<InterviewQA>()
+        val qaArr = o.optJSONArray("qaList")
+        if (qaArr != null) {
+            for (i in 0 until qaArr.length()) {
+                val q = qaArr.getJSONObject(i)
+                qaList.add(
+                    InterviewQA(
+                        id = q.optLong("id"),
+                        roundNo = q.optInt("roundNo", i + 1),
+                        question = q.optString("question", ""),
+                        answer = if (q.isNull("answer")) null else q.optString("answer"),
+                        score = if (q.isNull("score")) null else q.optInt("score"),
+                        comment = if (q.isNull("comment")) null else q.optString("comment"),
+                        answerTime = if (q.isNull("answerTime")) null else q.optString("answerTime")
+                    )
+                )
+            }
+        }
+        return InterviewSession(
+            id = o.optLong("id"),
+            position = o.optString("position", "Java 后端开发工程师"),
+            level = o.optString("level", "中级"),
+            category = if (o.isNull("category")) null else o.optString("category"),
+            docId = if (o.isNull("docId")) null else o.optLong("docId"),
+            docName = if (o.isNull("docName")) null else o.optString("docName"),
+            roundTotal = o.optInt("roundTotal", 5),
+            roundDone = o.optInt("roundDone", 0),
+            status = o.optInt("status", 0),
+            totalScore = if (o.isNull("totalScore")) null else o.optInt("totalScore"),
+            startTime = if (o.isNull("startTime")) null else o.optString("startTime"),
+            endTime = if (o.isNull("endTime")) null else o.optString("endTime"),
+            qaList = qaList
+        )
+    }
+
+    private fun parseReportData(data: JSONObject, sessionId: Long): InterviewReportData {
+        val dimScores = mutableMapOf<String, Int>()
+        val dimObj = data.optJSONObject("dimScores")
+        if (dimObj != null) {
+            val keys = dimObj.keys()
+            while (keys.hasNext()) {
+                val k = keys.next()
+                dimScores[k] = dimObj.optInt(k, 80)
+            }
+        }
+        return InterviewReportData(
+            sessionId = data.optLong("sessionId", sessionId),
+            totalScore = data.optInt("totalScore", 80),
+            grade = data.optString("grade", "良好"),
+            summary = data.optString("summary", ""),
+            strengths = data.optString("strengths", ""),
+            weaknesses = data.optString("weaknesses", ""),
+            suggestion = data.optString("suggestion", ""),
+            dimScores = dimScores
+        )
+    }
+
     private fun fallbackKnowledgeStats() = KnowledgeStats(
         docTotal = 27,
         chunkTotal = 19,

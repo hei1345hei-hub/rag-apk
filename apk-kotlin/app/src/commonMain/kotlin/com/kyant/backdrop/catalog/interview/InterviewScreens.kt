@@ -170,13 +170,14 @@ fun DashboardScreen(onNavigateToTab: (Int) -> Unit = {}) {
 }
 
 // -------------------------------------------------------------
-// 2. Chat Screen (AI 问答 - 完整真实交互、键盘无悬高、点击空白自动收起)
+// 2. Chat Screen (AI 问答 - 完整真实交互、多会话管理与 RAG/CHAT 模式双擎)
 // -------------------------------------------------------------
 @Composable
 fun ChatScreen() {
     val coroutineScope = rememberCoroutineScope()
     var inputText by remember { mutableStateOf("") }
     var isSending by remember { mutableStateOf(false) }
+    var showSessionModal by remember { mutableStateOf(false) }
 
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -186,17 +187,56 @@ fun ChatScreen() {
         focusManager.clearFocus()
     }
 
+    val currentMode = InterviewApi.currentChatMode
+    val sessions = InterviewApi.chatSessions
+    val currentSessionId = InterviewApi.currentChatSessionId
+    val selectedDocId = InterviewApi.selectedChatDocId
+    val docs = InterviewApi.knowledgeDocList
+
     var messages by remember {
         mutableStateOf(
             listOf(
                 ChatMessage(
                     id = "msg-0",
                     isUser = false,
-                    content = "你好！我是你的 Java 面试与技术助手。基于 RAG 知识库，我可以为你深度剖析 JVM、并发编程、Spring 源码、MySQL 调优与分布式高并发架构考点。请随时向我提问！",
+                    content = if (currentMode == "RAG")
+                        "你好！我是基于 RAG 知识库检索增强的 Java 面试与技术助手。请随时提问！"
+                    else
+                        "你好！我是 Java 日常技术助手，直连大模型为您解答疑难。请随时提问！",
                     timestamp = "12:00"
                 )
             )
         )
+    }
+
+    // 首次进入及切换模式时加载会话
+    LaunchedEffect(currentMode) {
+        val sList = InterviewApi.refreshChatSessions(currentMode)
+        if (sList.isNotEmpty() && currentSessionId == null) {
+            val first = sList[0]
+            InterviewApi.currentChatSessionId = first.id
+            val msgs = InterviewApi.loadChatMessages(first.id)
+            if (msgs.isNotEmpty()) messages = msgs
+        }
+    }
+
+    // 切换会话时加载历史消息
+    LaunchedEffect(currentSessionId) {
+        if (currentSessionId != null) {
+            val msgs = InterviewApi.loadChatMessages(currentSessionId)
+            if (msgs.isNotEmpty()) {
+                messages = msgs
+            } else {
+                messages = listOf(
+                    ChatMessage(
+                        id = "msg-0",
+                        isUser = false,
+                        content = "已进入会话。您可以继续提问任何 Java 技术问题！",
+                        timestamp = "刚刚"
+                    )
+                )
+            }
+        }
     }
 
     val listState = rememberLazyListState()
@@ -214,7 +254,7 @@ fun ChatScreen() {
         val aiPendingMsg = ChatMessage(
             id = "ai-${System.currentTimeMillis()}",
             isUser = false,
-            content = "正在思考并基于知识库向量检索...",
+            content = if (currentMode == "RAG") "正在检索知识库向量切片并生成严谨解析..." else "正在组织语言回答...",
             timestamp = "刚刚"
         )
 
@@ -224,7 +264,9 @@ fun ChatScreen() {
 
         coroutineScope.launch {
             listState.animateScrollToItem(messages.size - 1)
-            val (answer, refs) = InterviewApi.sendChatMessage(q)
+            val result = InterviewApi.sendChatMessageEx(q, selectedDocId, 3)
+            val answer = result.second
+            val refs = result.third
             messages = messages.dropLast(1) + ChatMessage(
                 id = "ai-reply-${System.currentTimeMillis()}",
                 isUser = false,
@@ -247,170 +289,450 @@ fun ChatScreen() {
     val isKeyboardOpen = imeBottom > navBottom + 30.dp
 
     val finalBottomPadding = if (isKeyboardOpen) {
-        // 键盘弹起时：贴合键盘上方 6dp，完全不高悬
         imeBottom + 6.dp
     } else {
-        // 键盘收起时：高出导航栏 92dp（距离液态玻璃底栏约 10~14dp 舒适留白，彻底不碰撞）
         navBottom + 92.dp
     }
 
-    Column(
-        Modifier
-            .fillMaxSize()
-            .background(BgColor)
-            .clickable(
-                interactionSource = null,
-                indication = null,
-                onClick = { dismissKeyboard() }
-            )
-    ) {
-        // 1. 紧凑沉浸式顶部导航栏 (背景延伸至状态栏顶部，内容自动避让系统状态栏)
+    Box(Modifier.fillMaxSize()) {
         Column(
             Modifier
-                .fillMaxWidth()
-                .background(CardBg.copy(alpha = 0.95f))
-                .border(width = 0.5.dp, color = BorderColor)
-                .statusBarsPadding()
-        ) {
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    Modifier
-                        .size(8.dp)
-                        .clip(CircleShape)
-                        .background(Color(0xFF22C55E))
-                )
-                Spacer(Modifier.width(8.dp))
-                BasicText(
-                    "Java 面试助手 · RAG 增强",
-                    style = TextStyle(color = TextInk, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-                )
-                Spacer(Modifier.weight(1f))
-                Box(
-                    Modifier
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(BgColor)
-                        .border(1.dp, BorderColor, RoundedCornerShape(12.dp))
-                        .clickable {
-                            messages = listOf(
-                                ChatMessage(
-                                    id = "msg-0",
-                                    isUser = false,
-                                    content = "会话已清空。您可以继续提问任何 Java 技术问题！"
-                                )
-                            )
-                        }
-                        .padding(horizontal = 10.dp, vertical = 4.dp)
-                ) {
-                    BasicText("清空对话", style = TextStyle(color = TextMuted, fontSize = 11.sp))
-                }
-            }
-        }
-
-        // 2. 聊天消息流：点击空白或滑动均触发关闭键盘与对话框回归
-        LazyColumn(
-            state = listState,
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth()
+                .fillMaxSize()
+                .background(BgColor)
                 .clickable(
                     interactionSource = null,
                     indication = null,
                     onClick = { dismissKeyboard() }
-                ),
-            contentPadding = PaddingValues(start = 14.dp, top = 8.dp, end = 14.dp, bottom = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+                )
         ) {
-            items(messages, key = { it.id }) { msg ->
-                ChatMessageItem(msg, onDismissKeyboard = { dismissKeyboard() })
+            // 1. 紧凑顶部导航栏与模式切换
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .background(CardBg.copy(alpha = 0.95f))
+                    .border(width = 0.5.dp, color = BorderColor)
+                    .statusBarsPadding()
+            ) {
+                // 第一行：标题、会话按钮、新建按钮
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            Modifier
+                                .size(8.dp)
+                                .clip(CircleShape)
+                                .background(if (currentMode == "RAG") Color(0xFF22C55E) else TagIndigo)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        BasicText(
+                            "Java 技术问答",
+                            style = TextStyle(color = TextInk, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                        )
+                    }
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        // 会话列表按钮
+                        Box(
+                            Modifier
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(BgColor)
+                                .border(1.dp, BorderColor, RoundedCornerShape(12.dp))
+                                .clickable { showSessionModal = true }
+                                .padding(horizontal = 10.dp, vertical = 5.dp)
+                        ) {
+                            BasicText(
+                                "📑 会话 (${sessions.size})",
+                                style = TextStyle(color = TagIndigo, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            )
+                        }
+
+                        // 新建会话按钮
+                        Box(
+                            Modifier
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(PrimaryRed)
+                                .clickable {
+                                    coroutineScope.launch {
+                                        val s = InterviewApi.createNewChatSession(sessionType = currentMode)
+                                        if (s != null) {
+                                            messages = listOf(
+                                                ChatMessage(
+                                                    id = "msg-0",
+                                                    isUser = false,
+                                                    content = "新会话已创建，请随时提问！",
+                                                    timestamp = "刚刚"
+                                                )
+                                            )
+                                        }
+                                    }
+                                }
+                                .padding(horizontal = 10.dp, vertical = 5.dp)
+                        ) {
+                            BasicText(
+                                "➕ 新建",
+                                style = TextStyle(color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            )
+                        }
+                    }
+                }
+
+                // 第二行：模式切换 Pills (RAG vs CHAT)
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    val isRag = (currentMode == "RAG")
+                    Box(
+                        Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(if (isRag) PrimaryRed else BgColor)
+                            .border(1.dp, if (isRag) PrimaryRed else BorderColor, RoundedCornerShape(10.dp))
+                            .clickable {
+                                if (!isRag) {
+                                    InterviewApi.currentChatMode = "RAG"
+                                    InterviewApi.currentChatSessionId = null
+                                }
+                            }
+                            .padding(vertical = 6.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        BasicText(
+                            "📚 知识库问答 (RAG)",
+                            style = TextStyle(
+                                color = if (isRag) Color.White else TextInk,
+                                fontSize = 11.sp,
+                                fontWeight = if (isRag) FontWeight.Bold else FontWeight.Normal
+                            )
+                        )
+                    }
+
+                    Box(
+                        Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(if (!isRag) PrimaryRed else BgColor)
+                            .border(1.dp, if (!isRag) PrimaryRed else BorderColor, RoundedCornerShape(10.dp))
+                            .clickable {
+                                if (isRag) {
+                                    InterviewApi.currentChatMode = "CHAT"
+                                    InterviewApi.currentChatSessionId = null
+                                }
+                            }
+                            .padding(vertical = 6.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        BasicText(
+                            "💬 日常技术对话 (CHAT)",
+                            style = TextStyle(
+                                color = if (!isRag) Color.White else TextInk,
+                                fontSize = 11.sp,
+                                fontWeight = if (!isRag) FontWeight.Bold else FontWeight.Normal
+                            )
+                        )
+                    }
+                }
+
+                // 第三行（仅在 RAG 模式下）：文档筛选范围
+                if (currentMode == "RAG") {
+                    LazyRow(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(start = 16.dp, end = 16.dp, bottom = 6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        item {
+                            val isAllSelected = (selectedDocId == null)
+                            Box(
+                                Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(if (isAllSelected) TagTeal else BgColor)
+                                    .border(1.dp, if (isAllSelected) TagTeal else BorderColor, RoundedCornerShape(8.dp))
+                                    .clickable { InterviewApi.selectedChatDocId = null }
+                                    .padding(horizontal = 8.dp, vertical = 3.dp)
+                            ) {
+                                BasicText(
+                                    "全部文档",
+                                    style = TextStyle(
+                                        color = if (isAllSelected) Color.White else TextMuted,
+                                        fontSize = 10.sp,
+                                        fontWeight = if (isAllSelected) FontWeight.Bold else FontWeight.Normal
+                                    )
+                                )
+                            }
+                        }
+                        items(docs) { doc ->
+                            val isDocSelected = (selectedDocId == doc.id)
+                            Box(
+                                Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(if (isDocSelected) TagTeal else BgColor)
+                                    .border(1.dp, if (isDocSelected) TagTeal else BorderColor, RoundedCornerShape(8.dp))
+                                    .clickable {
+                                        InterviewApi.selectedChatDocId = if (isDocSelected) null else doc.id
+                                    }
+                                    .padding(horizontal = 8.dp, vertical = 3.dp)
+                            ) {
+                                BasicText(
+                                    doc.docName,
+                                    style = TextStyle(
+                                        color = if (isDocSelected) Color.White else TextMuted,
+                                        fontSize = 10.sp,
+                                        fontWeight = if (isDocSelected) FontWeight.Bold else FontWeight.Normal
+                                    ),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 2. 聊天消息流：点击空白或滑动均触发关闭键盘与对话框回归
+            LazyColumn(
+                state = listState,
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .clickable(
+                        interactionSource = null,
+                        indication = null,
+                        onClick = { dismissKeyboard() }
+                    ),
+                contentPadding = PaddingValues(start = 14.dp, top = 8.dp, end = 14.dp, bottom = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                items(messages, key = { it.id }) { msg ->
+                    ChatMessageItem(msg, onDismissKeyboard = { dismissKeyboard() })
+                }
+            }
+
+            // 3. 底部输入与快捷灵感区：精准计算避开液态玻璃导航栏与软键盘
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = finalBottomPadding)
+            ) {
+                // 水平滑动快捷问题 Chips
+                LazyRow(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(
+                        listOf(
+                            "💡 JVM垃圾回收器",
+                            "💡 HashMap底层扩容",
+                            "💡 Redis缓存击穿",
+                            "💡 Spring事务失效",
+                            "💡 MySQL索引与回表",
+                            "💡 分布式锁实现方案"
+                        )
+                    ) { chip ->
+                        Box(
+                            Modifier
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(CardBg)
+                                .border(1.dp, BorderColor, RoundedCornerShape(14.dp))
+                                .clickable { sendMessage(chip.removePrefix("💡 ")) }
+                                .padding(horizontal = 10.dp, vertical = 5.dp)
+                        ) {
+                            BasicText(chip, style = TextStyle(color = TagIndigo, fontSize = 11.sp, fontWeight = FontWeight.Medium))
+                        }
+                    }
+                }
+
+                // 输入框与发送按钮
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(22.dp))
+                            .background(InputBoxBg)
+                            .border(1.dp, BorderColor, RoundedCornerShape(22.dp))
+                            .padding(horizontal = 14.dp, vertical = 10.dp)
+                    ) {
+                        if (inputText.isEmpty()) {
+                            BasicText(
+                                if (currentMode == "RAG") "向 RAG 知识库提问技术难点..." else "输入问题与技术助手对话...",
+                                style = TextStyle(color = TextDim, fontSize = 13.sp)
+                            )
+                        }
+                        BasicTextField(
+                            value = inputText,
+                            onValueChange = { inputText = it },
+                            textStyle = TextStyle(color = TextInk, fontSize = 13.sp),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+
+                    Spacer(Modifier.width(8.dp))
+
+                    Box(
+                        Modifier
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(if (inputText.isNotBlank() && !isSending) PrimaryRed else if (isAppInDarkTheme()) Color(0xFF475569) else Color(0xFFD5A39B))
+                            .clickable(enabled = inputText.isNotBlank() && !isSending) {
+                                sendMessage(inputText)
+                            }
+                            .padding(horizontal = 16.dp, vertical = 10.dp)
+                    ) {
+                        BasicText(
+                            if (isSending) "..." else "发送",
+                            style = TextStyle(color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        )
+                    }
+                }
             }
         }
 
-        // 3. 底部输入与快捷灵感区：精准计算避开液态玻璃导航栏与软键盘
+        // 会话管理弹窗
+        if (showSessionModal) {
+            ChatSessionModal(
+                onDismiss = { showSessionModal = false }
+            )
+        }
+    }
+}
+
+@Composable
+fun ChatSessionModal(onDismiss: () -> Unit) {
+    val coroutineScope = rememberCoroutineScope()
+    val sessions = InterviewApi.chatSessions
+    val currentId = InterviewApi.currentChatSessionId
+
+    UserModal(
+        title = "📑 会话管理 (${InterviewApi.currentChatMode} 模式)",
+        onDismiss = onDismiss
+    ) {
         Column(
             Modifier
                 .fillMaxWidth()
-                .padding(bottom = finalBottomPadding)
+                .heightIn(max = 420.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            // 水平滑动快捷问题 Chips（放置在输入框上方，随手指触手可及，不霸占顶部空间）
-            LazyRow(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 14.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                items(
-                    listOf(
-                        "💡 JVM垃圾回收器",
-                        "💡 HashMap底层扩容",
-                        "💡 Redis缓存击穿",
-                        "💡 Spring事务失效",
-                        "💡 MySQL索引与回表",
-                        "💡 分布式锁实现方案"
-                    )
-                ) { chip ->
+                BasicText(
+                    "共 ${sessions.size} 个历史会话",
+                    style = TextStyle(color = TextMuted, fontSize = 12.sp)
+                )
+                Box(
+                    Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(PrimaryRed)
+                        .clickable {
+                            coroutineScope.launch {
+                                InterviewApi.createNewChatSession(sessionType = InterviewApi.currentChatMode)
+                                onDismiss()
+                            }
+                        }
+                        .padding(horizontal = 10.dp, vertical = 5.dp)
+                ) {
+                    BasicText("➕ 新建会话", style = TextStyle(color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold))
+                }
+            }
+
+            if (sessions.isEmpty()) {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 30.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    BasicText("暂无会话记录，点击右上角新建会话", style = TextStyle(color = TextMuted, fontSize = 12.sp))
+                }
+            } else {
+                sessions.forEach { s ->
+                    val isCurrent = (s.id == currentId)
                     Box(
                         Modifier
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(CardBg)
-                            .border(1.dp, BorderColor, RoundedCornerShape(14.dp))
-                            .clickable { sendMessage(chip.removePrefix("💡 ")) }
-                            .padding(horizontal = 10.dp, vertical = 5.dp)
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(if (isCurrent) PrimaryRed.copy(alpha = 0.1f) else BgColor)
+                            .border(1.dp, if (isCurrent) PrimaryRed else BorderColor, RoundedCornerShape(10.dp))
+                            .clickable {
+                                InterviewApi.currentChatSessionId = s.id
+                                onDismiss()
+                            }
+                            .padding(12.dp)
                     ) {
-                        BasicText(chip, style = TextStyle(color = TagIndigo, fontSize = 11.sp, fontWeight = FontWeight.Medium))
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                BasicText(
+                                    s.title,
+                                    style = TextStyle(
+                                        color = if (isCurrent) PrimaryRed else TextInk,
+                                        fontSize = 13.sp,
+                                        fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Medium
+                                    ),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                BasicText(
+                                    "${s.createTime} · ${s.messageCount} 条消息",
+                                    style = TextStyle(color = TextDim, fontSize = 10.sp)
+                                )
+                            }
+
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                if (isCurrent) {
+                                    Badge("当前", PrimaryRed, TagRedBg)
+                                }
+                                Box(
+                                    Modifier
+                                        .clip(CircleShape)
+                                        .background(CardBg)
+                                        .clickable {
+                                            coroutineScope.launch {
+                                                InterviewApi.deleteChatSession(s.id)
+                                            }
+                                        }
+                                        .padding(6.dp)
+                                ) {
+                                    BasicText("🗑️", style = TextStyle(fontSize = 11.sp))
+                                }
+                            }
+                        }
                     }
                 }
             }
 
-            // 输入框与发送按钮
-            Row(
+            Box(
                 Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 14.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(SecondaryButtonBg)
+                    .clickable(onClick = onDismiss)
+                    .padding(vertical = 10.dp),
+                contentAlignment = Alignment.Center
             ) {
-                Box(
-                    Modifier
-                        .weight(1f)
-                        .clip(RoundedCornerShape(22.dp))
-                        .background(InputBoxBg)
-                        .border(1.dp, BorderColor, RoundedCornerShape(22.dp))
-                        .padding(horizontal = 14.dp, vertical = 10.dp)
-                ) {
-                    if (inputText.isEmpty()) {
-                        BasicText(
-                            "输入 Java 技术问题向助手提问...",
-                            style = TextStyle(color = TextDim, fontSize = 13.sp)
-                        )
-                    }
-                    BasicTextField(
-                        value = inputText,
-                        onValueChange = { inputText = it },
-                        textStyle = TextStyle(color = TextInk, fontSize = 13.sp),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-
-                Spacer(Modifier.width(8.dp))
-
-                Box(
-                    Modifier
-                        .clip(RoundedCornerShape(20.dp))
-                        .background(if (inputText.isNotBlank() && !isSending) PrimaryRed else if (isAppInDarkTheme()) Color(0xFF475569) else Color(0xFFD5A39B))
-                        .clickable(enabled = inputText.isNotBlank() && !isSending) {
-                            sendMessage(inputText)
-                        }
-                        .padding(horizontal = 16.dp, vertical = 10.dp)
-                ) {
-                    BasicText(
-                        if (isSending) "..." else "发送",
-                        style = TextStyle(color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                    )
-                }
+                BasicText("关闭", style = TextStyle(color = TextInk, fontSize = 12.sp, fontWeight = FontWeight.Medium))
             }
         }
     }
@@ -522,23 +844,35 @@ fun ChatMessageItem(msg: ChatMessage, onDismissKeyboard: () -> Unit = {}) {
 }
 
 // -------------------------------------------------------------
-// 3. Question Screen (题库精选 - 分类筛选与题目折叠解析)
+// 3. Question Screen (题库中心 - 分类/难度筛选、随机刷题自测与录入)
 // -------------------------------------------------------------
 @Composable
 fun QuestionScreen() {
     val coroutineScope = rememberCoroutineScope()
     var selectedCategory by remember { mutableStateOf("全部") }
+    var selectedDifficulty by remember { mutableStateOf<Int?>(null) } // null: 全部, 1: 简单, 2: 中等, 3: 困难
     var expandedId by remember { mutableStateOf<Int?>(null) }
     var searchKeyword by remember { mutableStateOf("") }
 
+    var showQuizModal by remember { mutableStateOf(false) }
+    var showAddModal by remember { mutableStateOf(false) }
+    var toastMsg by remember { mutableStateOf<String?>(null) }
+
     val categories = listOf("全部", "Spring", "MySQL", "Redis", "JVM", "Java基础", "分布式")
+    val diffOptions = listOf(null to "全部难度", 1 to "简单", 2 to "中等", 3 to "困难")
+
+    LaunchedEffect(toastMsg) {
+        if (toastMsg != null) {
+            delay(2500)
+            toastMsg = null
+        }
+    }
 
     LaunchedEffect(selectedCategory) {
         InterviewApi.refreshQuestions(selectedCategory)
     }
 
     val questions = InterviewApi.cachedQuestions.ifEmpty {
-        // 初始 fallback 保证瞬间有数据
         remember {
             listOf(
                 QuestionItem(1, "Redis 的持久化机制有哪些？如何选型？", "两种核心方式：\n1. RDB 定时全量快照，文件小、恢复极快；\n2. AOF 记录写日志，安全性高。\n生产推荐开启 RDB + AOF 混合持久化。", "Redis", 2, "RDB,AOF,持久化", 128),
@@ -550,95 +884,203 @@ fun QuestionScreen() {
         }
     }
 
-    val filteredList = questions.filter {
-        if (searchKeyword.isBlank()) true
-        else it.title.contains(searchKeyword, ignoreCase = true) || it.tags.contains(searchKeyword, ignoreCase = true)
+    val filteredList = questions.filter { q ->
+        val matchesCat = if (selectedCategory == "全部") true else q.category.equals(selectedCategory, ignoreCase = true)
+        val matchesDiff = if (selectedDifficulty == null) true else q.difficulty == selectedDifficulty
+        val matchesSearch = if (searchKeyword.isBlank()) true else q.title.contains(searchKeyword, ignoreCase = true) || q.tags.contains(searchKeyword, ignoreCase = true)
+        matchesCat && matchesDiff && matchesSearch
     }
 
     val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
-    LazyColumn(
-        Modifier
-            .fillMaxSize()
-            .background(BgColor),
-        contentPadding = PaddingValues(start = 14.dp, top = statusBarTop + 10.dp, end = 14.dp, bottom = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        item {
-            HeaderSection(
-                title = "题库精选",
-                subtitle = "QUESTION BANK",
-                actionText = if (InterviewApi.isLoadingQuestions) "加载中..." else "刷新题库",
-                onActionClick = {
-                    coroutineScope.launch { InterviewApi.refreshQuestions(selectedCategory) }
-                }
-            )
-        }
-
-        // Search Bar
-        item {
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(CardBg)
-                    .border(1.dp, BorderColor, RoundedCornerShape(12.dp))
-                    .padding(horizontal = 12.dp, vertical = 8.dp)
-            ) {
-                if (searchKeyword.isEmpty()) {
-                    BasicText("🔍 搜索考点关键词 (如: 索引, 扩容, 垃圾回收)...", style = TextStyle(color = TextDim, fontSize = 12.sp))
-                }
-                BasicTextField(
-                    value = searchKeyword,
-                    onValueChange = { searchKeyword = it },
-                    textStyle = TextStyle(color = TextInk, fontSize = 12.sp),
-                    modifier = Modifier.fillMaxWidth()
+    Box(Modifier.fillMaxSize()) {
+        LazyColumn(
+            Modifier
+                .fillMaxSize()
+                .background(BgColor),
+            contentPadding = PaddingValues(start = 14.dp, top = statusBarTop + 10.dp, end = 14.dp, bottom = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            item {
+                HeaderSection(
+                    title = "题库中心",
+                    subtitle = "QUESTION BANK",
+                    actionText = if (InterviewApi.isLoadingQuestions) "加载中..." else "刷新题库",
+                    onActionClick = {
+                        coroutineScope.launch { InterviewApi.refreshQuestions(selectedCategory) }
+                    }
                 )
             }
-        }
 
-        // Category Filter Tabs
-        item {
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                categories.forEach { cat ->
-                    val isActive = (cat == selectedCategory)
+            // 快捷功能栏：🎲 随机刷题自测 & ➕ 录入技术考题
+            item {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Box(
                         Modifier
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(if (isActive) TextInk else CardBg)
-                            .border(1.dp, if (isActive) TextInk else BorderColor, RoundedCornerShape(14.dp))
-                            .clickable { selectedCategory = cat }
-                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                            .weight(1f)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(PrimaryRed)
+                            .clickable {
+                                coroutineScope.launch {
+                                    InterviewApi.loadRandomQuiz(category = if (selectedCategory == "全部") null else selectedCategory, count = 5)
+                                    showQuizModal = true
+                                }
+                            }
+                            .padding(vertical = 11.dp),
+                        contentAlignment = Alignment.Center
                     ) {
-                        BasicText(
-                            cat,
-                            style = TextStyle(
-                                color = if (isActive) CardBg else TextInk,
-                                fontSize = 12.sp,
-                                fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal
-                            )
-                        )
+                        BasicText("🎲 随机刷题自测 (5题)", style = TextStyle(color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold))
+                    }
+
+                    Box(
+                        Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(CardBg)
+                            .border(1.dp, BorderColor, RoundedCornerShape(12.dp))
+                            .clickable { showAddModal = true }
+                            .padding(vertical = 11.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        BasicText("➕ 录入技术考题", style = TextStyle(color = TextInk, fontSize = 13.sp, fontWeight = FontWeight.Bold))
                     }
                 }
             }
+
+            // Search Bar
+            item {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(CardBg)
+                        .border(1.dp, BorderColor, RoundedCornerShape(12.dp))
+                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                ) {
+                    if (searchKeyword.isEmpty()) {
+                        BasicText("🔍 搜索考点关键词 (如: 索引, 扩容, 垃圾回收)...", style = TextStyle(color = TextDim, fontSize = 12.sp))
+                    }
+                    BasicTextField(
+                        value = searchKeyword,
+                        onValueChange = { searchKeyword = it },
+                        textStyle = TextStyle(color = TextInk, fontSize = 12.sp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+
+            // Category Filter Tabs
+            item {
+                LazyRow(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    items(categories) { cat ->
+                        val isActive = (cat == selectedCategory)
+                        Box(
+                            Modifier
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(if (isActive) TextInk else CardBg)
+                                .border(1.dp, if (isActive) TextInk else BorderColor, RoundedCornerShape(14.dp))
+                                .clickable { selectedCategory = cat }
+                                .padding(horizontal = 10.dp, vertical = 6.dp)
+                        ) {
+                            BasicText(
+                                cat,
+                                style = TextStyle(
+                                    color = if (isActive) CardBg else TextInk,
+                                    fontSize = 12.sp,
+                                    fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Difficulty Filter Tabs
+            item {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    diffOptions.forEach { (dVal, dLabel) ->
+                        val isActive = (selectedDifficulty == dVal)
+                        Box(
+                            Modifier
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(if (isActive) PrimaryRed else CardBg)
+                                .border(1.dp, if (isActive) PrimaryRed else BorderColor, RoundedCornerShape(12.dp))
+                                .clickable { selectedDifficulty = dVal }
+                                .padding(horizontal = 10.dp, vertical = 4.dp)
+                        ) {
+                            BasicText(
+                                dLabel,
+                                style = TextStyle(
+                                    color = if (isActive) Color.White else TextInk,
+                                    fontSize = 11.sp,
+                                    fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Question items
+            items(filteredList, key = { it.id }) { q ->
+                QuestionCard(
+                    question = q,
+                    isExpanded = (expandedId == q.id),
+                    onToggle = {
+                        expandedId = if (expandedId == q.id) null else q.id
+                    },
+                    onDelete = {
+                        coroutineScope.launch {
+                            val ok = InterviewApi.deleteQuestion(q.id)
+                            toastMsg = if (ok) "已成功删除考题: ${q.title.take(12)}..." else "删除失败"
+                        }
+                    }
+                )
+            }
+
+            item {
+                Spacer(Modifier.height(110.dp))
+            }
         }
 
-        // Question items
-        items(filteredList, key = { it.id }) { q ->
-            QuestionCard(
-                question = q,
-                isExpanded = (expandedId == q.id),
-                onToggle = {
-                    expandedId = if (expandedId == q.id) null else q.id
-                }
+        // Floating Toast Notification
+        toastMsg?.let { msg ->
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(top = 16.dp, start = 20.dp, end = 20.dp)
+                    .align(Alignment.TopCenter)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(TextInk.copy(alpha = 0.92f))
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                BasicText(msg, style = TextStyle(color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium))
+            }
+        }
+
+        // 随机自测弹窗
+        if (showQuizModal) {
+            RandomQuizModal(
+                onDismiss = { showQuizModal = false }
             )
         }
 
-        item {
-            Spacer(Modifier.height(110.dp))
+        // 录入新题弹窗
+        if (showAddModal) {
+            AddQuestionModal(
+                onDismiss = { showAddModal = false },
+                onSuccess = {
+                    showAddModal = false
+                    toastMsg = "新考题录入成功并已入库！"
+                }
+            )
         }
     }
 }
@@ -647,7 +1089,8 @@ fun QuestionScreen() {
 fun QuestionCard(
     question: QuestionItem,
     isExpanded: Boolean,
-    onToggle: () -> Unit
+    onToggle: () -> Unit,
+    onDelete: (() -> Unit)? = null
 ) {
     val diffText = when (question.difficulty) {
         1 -> "简单"
@@ -687,10 +1130,23 @@ fun QuestionCard(
                 style = TextStyle(color = TextInk, fontSize = 14.sp, fontWeight = FontWeight.Bold, lineHeight = 20.sp)
             )
             Spacer(Modifier.width(8.dp))
-            BasicText(
-                if (isExpanded) "▲ 收起" else "▼ 解析",
-                style = TextStyle(color = ProjectWarmYellow, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-            )
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (onDelete != null) {
+                    Box(
+                        Modifier
+                            .clip(CircleShape)
+                            .background(BgColor)
+                            .clickable { onDelete() }
+                            .padding(4.dp)
+                    ) {
+                        BasicText("🗑️", style = TextStyle(fontSize = 11.sp))
+                    }
+                }
+                BasicText(
+                    if (isExpanded) "▲ 收起" else "▼ 解析",
+                    style = TextStyle(color = ProjectWarmYellow, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                )
+            }
         }
 
         Row(
@@ -726,297 +1182,377 @@ fun QuestionCard(
     }
 }
 
-// -------------------------------------------------------------
-// 4. Interview Screen (模拟面试 - 全真面试间与实时评测)
-// -------------------------------------------------------------
 @Composable
-fun InterviewScreen() {
-    var inSession by remember { mutableStateOf(false) }
-    var currentStep by remember { mutableIntStateOf(0) }
-    var userAnswerText by remember { mutableStateOf("") }
-    var isSubmitting by remember { mutableStateOf(false) }
-    var showReport by remember { mutableStateOf(false) }
+fun RandomQuizModal(onDismiss: () -> Unit) {
+    val coroutineScope = rememberCoroutineScope()
+    val quizQuestions = InterviewApi.randomQuizQuestions
+    var currentIndex by remember { mutableIntStateOf(0) }
+    var revealAnswer by remember { mutableStateOf(false) }
 
-    val interviewQuestions = remember {
-        listOf(
-            "请详细说说 ConcurrentHashMap 在 JDK 1.8 中是如何通过 CAS + synchronized 保障线程安全的？相较于 1.7 的分段锁（Segment）有哪些优势？",
-            "在 Spring Boot 生产环境中，如果某台服务器 CPU 飙高到 100%，你的标准排查排障步骤与核心 Linux/JVM 指令是什么？",
-            "请谈谈微服务架构下分布式事务的解决方案（如 Seata AT/TCC 模式与基于消息队列的可靠消息最终一致性），如何权衡一致性与可用性？"
-        )
-    }
-
-    val feedbacks = remember {
-        mutableStateListOf(
-            "回答结构清晰，准确指出了 CAS 降低锁粒度、数组节点头锁 synchronized 的设计精髓，评定分：92 分。",
-            "排查思路清晰完整，涵盖了 top -H、jstack 提取线程栈、十六进制 nid 定位热点代码，评定分：95 分。",
-            "对 CAP 定理和 BASE 理论理解深刻，方案选型务实，评定分：90 分。"
-        )
-    }
-
-    if (inSession) {
-        Column(
-            Modifier
-                .fillMaxSize()
-                .background(BgColor)
-                .statusBarsPadding()
-                .padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            // Room Header
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                BasicText(
-                    "🎙️ 全真模拟面试室",
-                    style = TextStyle(color = TextInk, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                )
-                Box(
-                    Modifier
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(Color(0xFFE2E8F0))
-                        .clickable { inSession = false }
-                        .padding(horizontal = 10.dp, vertical = 5.dp)
-                ) {
-                    BasicText("退出面试", style = TextStyle(color = TextInk, fontSize = 11.sp))
-                }
-            }
-
-            // Progress bar
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                interviewQuestions.indices.forEach { idx ->
-                    Box(
-                        Modifier
-                            .weight(1f)
-                            .height(4.dp)
-                            .clip(RoundedCornerShape(2.dp))
-                            .background(if (idx <= currentStep) PrimaryRed else Color(0xFFD8D2C4))
-                    )
-                }
-            }
-
-            // Question Card
+    UserModal(
+        title = "🎲 随机刷题自测",
+        onDismiss = onDismiss
+    ) {
+        if (InterviewApi.isLoadingQuiz) {
             Box(
                 Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(CardBg)
-                    .border(1.dp, BorderColor, RoundedCornerShape(14.dp))
-                    .padding(14.dp)
+                    .padding(vertical = 40.dp),
+                contentAlignment = Alignment.Center
             ) {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                BasicText("正在从题库抽取高质量考题...", style = TextStyle(color = TextMuted, fontSize = 13.sp))
+            }
+        } else if (quizQuestions.isEmpty()) {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 40.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                BasicText("题库中暂无可抽取的题目", style = TextStyle(color = TextMuted, fontSize = 13.sp))
+            }
+        } else {
+            val q = quizQuestions.getOrNull(currentIndex) ?: quizQuestions[0]
+            val diffText = when (q.difficulty) {
+                1 -> "简单"
+                3 -> "困难"
+                else -> "中等"
+            }
+            val diffColor = when (q.difficulty) {
+                1 -> TagTeal
+                3 -> TagRed
+                else -> TagAmber
+            }
+            val diffBg = when (q.difficulty) {
+                1 -> TagTealBg
+                3 -> TagRedBg
+                else -> TagAmberBg
+            }
+
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 460.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     BasicText(
-                        "第 ${currentStep + 1} / ${interviewQuestions.size} 题 · 面试官提问",
-                        style = TextStyle(color = PrimaryRed, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        "第 ${currentIndex + 1} / ${quizQuestions.size} 题",
+                        style = TextStyle(color = PrimaryRed, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                     )
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Badge(q.category, TagIndigo, TagIndigoBg)
+                        Badge(diffText, diffColor, diffBg)
+                    }
+                }
+
+                // Question Title Card
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(BgColor)
+                        .padding(14.dp)
+                ) {
                     BasicText(
-                        interviewQuestions[currentStep],
+                        q.title,
                         style = TextStyle(color = TextInk, fontSize = 14.sp, fontWeight = FontWeight.Bold, lineHeight = 20.sp)
                     )
                 }
-            }
 
-            // User Answer Box
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .height(130.dp)
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(InputBoxBg)
-                    .border(1.dp, BorderColor, RoundedCornerShape(14.dp))
-                    .padding(12.dp)
-            ) {
-                if (userAnswerText.isEmpty()) {
-                    BasicText(
-                        "在此输入您的作答思路，或点击下方按钮直接提交生成评测...",
-                        style = TextStyle(color = TextDim, fontSize = 12.sp)
-                    )
-                }
-                BasicTextField(
-                    value = userAnswerText,
-                    onValueChange = { userAnswerText = it },
-                    textStyle = TextStyle(color = TextInk, fontSize = 13.sp, lineHeight = 18.sp),
-                    modifier = Modifier.fillMaxSize()
-                )
-            }
-
-            // Submit / Action buttons
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
+                // Reveal Answer Button
                 Box(
                     Modifier
-                        .weight(1f)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(PrimaryRed)
-                        .clickable(enabled = !isSubmitting) {
-                            if (currentStep < interviewQuestions.size - 1) {
-                                currentStep++
-                                userAnswerText = ""
-                            } else {
-                                showReport = true
-                            }
-                        }
-                        .padding(vertical = 12.dp),
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(if (revealAnswer) TagTealBg else TagAmberBg)
+                        .clickable { revealAnswer = !revealAnswer }
+                        .padding(vertical = 10.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     BasicText(
-                        if (currentStep < interviewQuestions.size - 1) "提交回答并进入下一题" else "完成面试并查看评测报告",
-                        style = TextStyle(color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        if (revealAnswer) "🙈 收起参考解析" else "👁️ 点击查看标准参考解析",
+                        style = TextStyle(color = if (revealAnswer) TagTeal else TagAmber, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     )
                 }
-            }
 
-            if (showReport) {
-                Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(TagAmberBg)
-                        .border(1.dp, TagAmber, RoundedCornerShape(14.dp))
-                        .padding(14.dp)
-                ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        BasicText("🏆 面试综合评测总分: 92.5 分 (优秀)", style = TextStyle(color = TagAmber, fontSize = 14.sp, fontWeight = FontWeight.Bold))
-                        BasicText("基础扎实度: 95分 | 场景实战力: 90分 | 架构抽象力: 92分", style = TextStyle(color = TextInk, fontSize = 12.sp))
-                        BasicText("评语：对 Java 核心并发包底层原理及线上故障排查掌握扎实，建议在分布式大模型工程链路中持续拓展实战深度。", style = TextStyle(color = TextMuted, fontSize = 11.sp, lineHeight = 16.sp))
+                // Revealed Answer
+                if (revealAnswer) {
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(SecondaryButtonBg)
+                            .border(1.dp, Color(0xFFD8D2C4), RoundedCornerShape(10.dp))
+                            .padding(12.dp)
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            BasicText("【标准参考解析】", style = TextStyle(color = TagIndigo, fontSize = 12.sp, fontWeight = FontWeight.Bold))
+                            BasicText(
+                                q.answer,
+                                style = TextStyle(color = TextInk, fontSize = 13.sp, lineHeight = 19.sp)
+                            )
+                        }
                     }
                 }
-            }
 
-            Spacer(Modifier.height(110.dp))
-        }
-    } else {
-        // Scenario Selection Screen
-        val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-        LazyColumn(
-            Modifier
-                .fillMaxSize()
-                .background(BgColor),
-            contentPadding = PaddingValues(start = 14.dp, top = statusBarTop + 10.dp, end = 14.dp, bottom = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            item {
-                HeaderSection("模拟面试", "MOCK INTERVIEW")
-            }
-
-            item {
-                Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(CardBg)
-                        .border(1.dp, BorderColor, RoundedCornerShape(16.dp))
-                        .padding(16.dp)
+                // Navigation Controls
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                Modifier
-                                    .size(36.dp)
-                                    .clip(CircleShape)
-                                    .background(TagRedBg),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                BasicText("🎯", style = TextStyle(fontSize = 18.sp))
+                    Box(
+                        Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(if (currentIndex > 0) SecondaryButtonBg else BgColor)
+                            .clickable(enabled = currentIndex > 0) {
+                                currentIndex--
+                                revealAnswer = false
                             }
-                            Spacer(Modifier.width(10.dp))
-                            Column {
-                                BasicText("AI 驱动全真模拟面试", style = TextStyle(color = TextInk, fontSize = 15.sp, fontWeight = FontWeight.Bold))
-                                BasicText("动态追问 · 多维评分 · 针对性弱项雷达", style = TextStyle(color = TextMuted, fontSize = 11.sp))
-                            }
-                        }
+                            .padding(vertical = 10.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        BasicText("◀ 上一题", style = TextStyle(color = if (currentIndex > 0) TextInk else TextDim, fontSize = 12.sp, fontWeight = FontWeight.Bold))
+                    }
 
-                        Box(
-                            Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(PrimaryRed)
-                                .clickable {
-                                    inSession = true
-                                    currentStep = 0
-                                    showReport = false
+                    Box(
+                        Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(if (currentIndex < quizQuestions.size - 1) PrimaryRed else TagTeal)
+                            .clickable {
+                                if (currentIndex < quizQuestions.size - 1) {
+                                    currentIndex++
+                                    revealAnswer = false
+                                } else {
+                                    onDismiss()
                                 }
-                                .padding(vertical = 12.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            BasicText("立即开启全真模拟面试", style = TextStyle(color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold))
-                        }
+                            }
+                            .padding(vertical = 10.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        BasicText(
+                            if (currentIndex < quizQuestions.size - 1) "下一题 ▶" else "完成自测",
+                            style = TextStyle(color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        )
                     }
                 }
-            }
 
-            item {
-                SectionTitle("01", "精选面试场景")
-            }
-
-            item {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    InterviewScenarioCard(
-                        "Java 后端开发专家面 (P6+/P7)",
-                        "深度考察 JVM 调优、JUC 并发源码与高并发架构实战",
-                        "3 题 · 约 10 分钟",
-                        TagRed,
-                        onClick = { inSession = true; currentStep = 0; showReport = false }
-                    )
-                    InterviewScenarioCard(
-                        "分布式系统与中间件实战面",
-                        "聚焦 Redis 高可用、Kafka 消息可靠性与 MySQL 事务调优",
-                        "3 题 · 约 10 分钟",
-                        TagIndigo,
-                        onClick = { inSession = true; currentStep = 0; showReport = false }
-                    )
-                    InterviewScenarioCard(
-                        "Spring Boot & Cloud 源码专场",
-                        "剖析 IoC/AOP 动态代理机制与微服务高可用组件原理",
-                        "3 题 · 约 10 分钟",
-                        TagTeal,
-                        onClick = { inSession = true; currentStep = 0; showReport = false }
-                    )
+                // Reload group button
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(BgColor)
+                        .clickable {
+                            coroutineScope.launch {
+                                currentIndex = 0
+                                revealAnswer = false
+                                InterviewApi.loadRandomQuiz(count = 5)
+                            }
+                        }
+                        .padding(vertical = 8.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    BasicText("🔄 再换一组 (5题)", style = TextStyle(color = TextMuted, fontSize = 11.sp))
                 }
-            }
-
-            item {
-                Spacer(Modifier.height(110.dp))
             }
         }
     }
 }
 
 @Composable
-fun InterviewScenarioCard(
-    title: String,
-    desc: String,
-    meta: String,
-    color: Color,
-    onClick: () -> Unit
+fun AddQuestionModal(
+    onDismiss: () -> Unit,
+    onSuccess: () -> Unit
 ) {
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(CardBg)
-            .border(1.dp, BorderColor, RoundedCornerShape(14.dp))
-            .clickable(onClick = onClick)
-            .padding(14.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp)
+    val coroutineScope = rememberCoroutineScope()
+    var title by remember { mutableStateOf("") }
+    var answer by remember { mutableStateOf("") }
+    var category by remember { mutableStateOf("Java基础") }
+    var difficulty by remember { mutableIntStateOf(2) }
+    var tags by remember { mutableStateOf("核心高频") }
+    var isSubmitting by remember { mutableStateOf(false) }
+    var errorMsg by remember { mutableStateOf<String?>(null) }
+
+    val categories = listOf("Java基础", "Spring", "MySQL", "Redis", "JVM", "分布式")
+
+    UserModal(
+        title = "➕ 录入技术考题",
+        onDismiss = onDismiss
     ) {
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .heightIn(max = 460.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            BasicText(title, style = TextStyle(color = TextInk, fontSize = 14.sp, fontWeight = FontWeight.Bold))
-            BasicText("进入 >", style = TextStyle(color = color, fontSize = 12.sp, fontWeight = FontWeight.Bold))
+            // Title
+            BasicText("题目描述 *", style = TextStyle(color = TextMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold))
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(InputBoxBg)
+                    .border(1.dp, BorderColor, RoundedCornerShape(10.dp))
+                    .padding(10.dp)
+            ) {
+                if (title.isEmpty()) {
+                    BasicText("如：ConcurrentHashMap 1.8 扩容原理...", style = TextStyle(color = TextDim, fontSize = 12.sp))
+                }
+                BasicTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    textStyle = TextStyle(color = TextInk, fontSize = 12.sp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
+            // Category Picker
+            BasicText("知识分类 *", style = TextStyle(color = TextMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold))
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                items(categories) { cat ->
+                    val isSelected = (cat == category)
+                    Box(
+                        Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(if (isSelected) PrimaryRed else BgColor)
+                            .border(1.dp, if (isSelected) PrimaryRed else BorderColor, RoundedCornerShape(12.dp))
+                            .clickable { category = cat }
+                            .padding(horizontal = 10.dp, vertical = 5.dp)
+                    ) {
+                        BasicText(cat, style = TextStyle(color = if (isSelected) Color.White else TextInk, fontSize = 11.sp))
+                    }
+                }
+            }
+
+            // Difficulty Picker
+            BasicText("题目难度 *", style = TextStyle(color = TextMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(1 to "简单", 2 to "中等", 3 to "困难").forEach { (dVal, dLabel) ->
+                    val isSelected = (difficulty == dVal)
+                    Box(
+                        Modifier
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(if (isSelected) TagTeal else BgColor)
+                            .border(1.dp, if (isSelected) TagTeal else BorderColor, RoundedCornerShape(10.dp))
+                            .clickable { difficulty = dVal }
+                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                    ) {
+                        BasicText(dLabel, style = TextStyle(color = if (isSelected) Color.White else TextInk, fontSize = 11.sp, fontWeight = FontWeight.Bold))
+                    }
+                }
+            }
+
+            // Tags
+            BasicText("考点标签 (英文逗号隔开)", style = TextStyle(color = TextMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold))
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(InputBoxBg)
+                    .border(1.dp, BorderColor, RoundedCornerShape(10.dp))
+                    .padding(10.dp)
+            ) {
+                if (tags.isEmpty()) {
+                    BasicText("如：并发,锁机制,AQS", style = TextStyle(color = TextDim, fontSize = 12.sp))
+                }
+                BasicTextField(
+                    value = tags,
+                    onValueChange = { tags = it },
+                    textStyle = TextStyle(color = TextInk, fontSize = 12.sp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
+            // Answer
+            BasicText("标准参考解析 *", style = TextStyle(color = TextMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold))
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(90.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(InputBoxBg)
+                    .border(1.dp, BorderColor, RoundedCornerShape(10.dp))
+                    .padding(10.dp)
+            ) {
+                if (answer.isEmpty()) {
+                    BasicText("输入该题的标准深度参考答案...", style = TextStyle(color = TextDim, fontSize = 12.sp))
+                }
+                BasicTextField(
+                    value = answer,
+                    onValueChange = { answer = it },
+                    textStyle = TextStyle(color = TextInk, fontSize = 12.sp),
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+
+            errorMsg?.let { err ->
+                BasicText(err, style = TextStyle(color = PrimaryRed, fontSize = 11.sp))
+            }
+
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Box(
+                    Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(PrimaryRed)
+                        .clickable(enabled = !isSubmitting) {
+                            if (title.isBlank()) {
+                                errorMsg = "请输入题目描述"
+                                return@clickable
+                            }
+                            if (answer.isBlank()) {
+                                errorMsg = "请输入参考解析"
+                                return@clickable
+                            }
+                            isSubmitting = true
+                            errorMsg = null
+                            coroutineScope.launch {
+                                val ok = InterviewApi.addQuestion(title, answer, category, difficulty, tags)
+                                isSubmitting = false
+                                if (ok) {
+                                    onSuccess()
+                                } else {
+                                    errorMsg = "保存失败，请检查网络或后端接口"
+                                }
+                            }
+                        }
+                        .padding(vertical = 11.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    BasicText(if (isSubmitting) "正在保存..." else "保存提交入库", style = TextStyle(color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold))
+                }
+
+                Box(
+                    Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(SecondaryButtonBg)
+                        .clickable(onClick = onDismiss)
+                        .padding(vertical = 11.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    BasicText("取消", style = TextStyle(color = TextInk, fontSize = 12.sp, fontWeight = FontWeight.Medium))
+                }
+            }
         }
-        BasicText(desc, style = TextStyle(color = TextMuted, fontSize = 12.sp, lineHeight = 16.sp))
-        BasicText(meta, style = TextStyle(color = TextDim, fontSize = 11.sp))
     }
+}
+
+// -------------------------------------------------------------
+// 4. Interview Screen (模拟面试 - 全真面试间与实时评测)
+// -------------------------------------------------------------
+@Composable
+fun InterviewScreen() {
+    RealInterviewScreen()
 }
 
 // -------------------------------------------------------------
@@ -1045,6 +1581,8 @@ fun UserScreen(onNavigateToTab: (Int) -> Unit = {}) {
     var showCheckinDialog by remember { mutableStateOf(false) }
     var showLogoutConfirmDialog by remember { mutableStateOf(false) }
     var showThemeDialog by remember { mutableStateOf(false) }
+    var showChangePasswordDialog by remember { mutableStateOf(false) }
+    var showEditProfileDialog by remember { mutableStateOf(false) }
 
     // Auto dismiss toast after 2.5 seconds
     LaunchedEffect(cacheToast) {
@@ -1348,6 +1886,28 @@ fun UserScreen(onNavigateToTab: (Int) -> Unit = {}) {
                     )
                     DividerLine()
                     UserActionRow(
+                        icon = "✏️",
+                        title = "修改个人资料",
+                        subtitle = if (isLoggedIn) "当前昵称: ${user.nickname} · 邮箱: ${user.email.ifEmpty { "未设置" }}" else "登录后可修改个人资料",
+                        trailingText = "编辑 >",
+                        onClick = {
+                            if (isLoggedIn) showEditProfileDialog = true
+                            else InterviewApi.showLoginModal = true
+                        }
+                    )
+                    DividerLine()
+                    UserActionRow(
+                        icon = "🔒",
+                        title = "修改登录密码",
+                        subtitle = if (isLoggedIn) "定期更换密码保障账号安全" else "登录后可修改密码",
+                        trailingText = "修改 >",
+                        onClick = {
+                            if (isLoggedIn) showChangePasswordDialog = true
+                            else InterviewApi.showLoginModal = true
+                        }
+                    )
+                    DividerLine()
+                    UserActionRow(
                         icon = "🧹",
                         title = "清除本地会话缓存",
                         subtitle = "清理临时聊天会话与离线题目缓存",
@@ -1530,6 +2090,13 @@ fun UserScreen(onNavigateToTab: (Int) -> Unit = {}) {
                         .verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
+                    val realCompleted = InterviewApi.interviewSessions.filter { it.status == 1 }
+                    val avgScore = if (realCompleted.isNotEmpty()) {
+                        realCompleted.mapNotNull { it.totalScore }.average().toInt()
+                    } else {
+                        InterviewApi.cachedStats.avgScore.coerceAtLeast(92)
+                    }
+
                     Box(
                         Modifier
                             .fillMaxWidth()
@@ -1541,35 +2108,64 @@ fun UserScreen(onNavigateToTab: (Int) -> Unit = {}) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                                 BasicText("历次模拟面试综合均分", style = TextStyle(color = PrimaryRed, fontSize = 11.sp, fontWeight = FontWeight.Bold))
-                                BasicText("92.5 分 · 资深 P6+", style = TextStyle(color = PrimaryRed, fontSize = 20.sp, fontWeight = FontWeight.Bold))
-                                BasicText("能力超越全国 94.6% 的高频备考候选人", style = TextStyle(color = TextInk.copy(alpha = 0.8f), fontSize = 11.sp))
+                                BasicText("$avgScore 分 · 资深评定", style = TextStyle(color = PrimaryRed, fontSize = 20.sp, fontWeight = FontWeight.Bold))
+                                BasicText("多维能力雷达与全真模拟面试考场已全面联动", style = TextStyle(color = TextInk.copy(alpha = 0.8f), fontSize = 11.sp))
                             }
                             BasicText("🎯", style = TextStyle(fontSize = 32.sp))
                         }
                     }
 
-                    BasicText("最近 3 场全真模拟评测记录", style = TextStyle(color = TextInk, fontSize = 12.sp, fontWeight = FontWeight.Bold))
-
-                    val reports = listOf(
-                        Triple("2026-11-14", "高并发场景与 JUC 源码实战", "94分 · 优秀"),
-                        Triple("2026-11-12", "JVM 底层调优与垃圾回收排查", "91分 · 良好"),
-                        Triple("2026-11-09", "微服务架构与中间件高可用", "93分 · 优秀")
-                    )
-
-                    reports.forEach { (date, title, score) ->
-                        Box(
-                            Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(BgColor)
-                                .padding(horizontal = 12.dp, vertical = 10.dp)
-                        ) {
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                    BasicText(title, style = TextStyle(color = TextInk, fontSize = 12.sp, fontWeight = FontWeight.Bold))
-                                    BasicText(date, style = TextStyle(color = TextMuted, fontSize = 10.sp))
+                    if (realCompleted.isNotEmpty()) {
+                        BasicText("已完成的模拟评测记录 (${realCompleted.size} 场)", style = TextStyle(color = TextInk, fontSize = 12.sp, fontWeight = FontWeight.Bold))
+                        realCompleted.take(5).forEach { s ->
+                            val sc = s.totalScore ?: 85
+                            val grade = if (sc >= 90) "优秀" else if (sc >= 80) "良好" else "合格"
+                            Box(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(BgColor)
+                                    .clickable {
+                                        showReportDialog = false
+                                        onNavigateToTab(2)
+                                    }
+                                    .padding(horizontal = 12.dp, vertical = 10.dp)
+                            ) {
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                        BasicText("${s.position} (${s.level})", style = TextStyle(color = TextInk, fontSize = 12.sp, fontWeight = FontWeight.Bold))
+                                        BasicText("${s.startTime ?: s.endTime ?: "最近"} · 考查轮次: ${s.roundTotal} 题", style = TextStyle(color = TextMuted, fontSize = 10.sp))
+                                    }
+                                    Badge("${sc}分 · $grade", TagTeal, TagTealBg)
                                 }
-                                Badge(score, TagTeal, TagTealBg)
+                            }
+                        }
+                    } else {
+                        BasicText("模拟评测样本记录", style = TextStyle(color = TextInk, fontSize = 12.sp, fontWeight = FontWeight.Bold))
+                        val reports = listOf(
+                            Triple("2026-11-14", "高并发场景与 JUC 源码实战", "94分 · 优秀"),
+                            Triple("2026-11-12", "JVM 底层调优与垃圾回收排查", "91分 · 良好"),
+                            Triple("2026-11-09", "微服务架构与中间件高可用", "93分 · 优秀")
+                        )
+                        reports.forEach { (date, title, score) ->
+                            Box(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(BgColor)
+                                    .clickable {
+                                        showReportDialog = false
+                                        onNavigateToTab(2)
+                                    }
+                                    .padding(horizontal = 12.dp, vertical = 10.dp)
+                            ) {
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                        BasicText(title, style = TextStyle(color = TextInk, fontSize = 12.sp, fontWeight = FontWeight.Bold))
+                                        BasicText(date, style = TextStyle(color = TextMuted, fontSize = 10.sp))
+                                    }
+                                    Badge(score, TagTeal, TagTealBg)
+                                }
                             }
                         }
                     }
@@ -2161,6 +2757,224 @@ fun UserScreen(onNavigateToTab: (Int) -> Unit = {}) {
                         contentAlignment = Alignment.Center
                     ) {
                         BasicText("关闭", style = TextStyle(color = TextInk, fontSize = 12.sp, fontWeight = FontWeight.Medium))
+                    }
+                }
+            }
+        }
+
+        // 10. Change Password Modal
+        if (showChangePasswordDialog) {
+            var oldPass by remember { mutableStateOf("") }
+            var newPass by remember { mutableStateOf("") }
+            var confirmPass by remember { mutableStateOf("") }
+            var isSubmitting by remember { mutableStateOf(false) }
+            var errorMsg by remember { mutableStateOf<String?>(null) }
+
+            UserModal(
+                title = "🔒 修改登录密码",
+                onDismiss = { showChangePasswordDialog = false }
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    BasicText("原密码 *", style = TextStyle(color = TextMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold))
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(InputBoxBg)
+                            .border(1.dp, BorderColor, RoundedCornerShape(10.dp))
+                            .padding(10.dp)
+                    ) {
+                        BasicTextField(
+                            value = oldPass,
+                            onValueChange = { oldPass = it },
+                            textStyle = TextStyle(color = TextInk, fontSize = 12.sp),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+
+                    BasicText("新密码 (至少6位) *", style = TextStyle(color = TextMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold))
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(InputBoxBg)
+                            .border(1.dp, BorderColor, RoundedCornerShape(10.dp))
+                            .padding(10.dp)
+                    ) {
+                        BasicTextField(
+                            value = newPass,
+                            onValueChange = { newPass = it },
+                            textStyle = TextStyle(color = TextInk, fontSize = 12.sp),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+
+                    BasicText("确认新密码 *", style = TextStyle(color = TextMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold))
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(InputBoxBg)
+                            .border(1.dp, BorderColor, RoundedCornerShape(10.dp))
+                            .padding(10.dp)
+                    ) {
+                        BasicTextField(
+                            value = confirmPass,
+                            onValueChange = { confirmPass = it },
+                            textStyle = TextStyle(color = TextInk, fontSize = 12.sp),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+
+                    errorMsg?.let { err ->
+                        BasicText(err, style = TextStyle(color = PrimaryRed, fontSize = 11.sp))
+                    }
+
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Box(
+                            Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(PrimaryRed)
+                                .clickable(enabled = !isSubmitting) {
+                                    if (oldPass.isBlank()) {
+                                        errorMsg = "请输入原密码"
+                                        return@clickable
+                                    }
+                                    if (newPass.isBlank() || newPass.length < 6) {
+                                        errorMsg = "新密码不能少于 6 位"
+                                        return@clickable
+                                    }
+                                    if (newPass != confirmPass) {
+                                        errorMsg = "两次输入的新密码不一致"
+                                        return@clickable
+                                    }
+                                    isSubmitting = true
+                                    errorMsg = null
+                                    coroutineScope.launch {
+                                        val (ok, msg) = InterviewApi.changePassword(oldPass, newPass)
+                                        isSubmitting = false
+                                        if (ok) {
+                                            cacheToast = "密码修改成功！请牢记新密码"
+                                            showChangePasswordDialog = false
+                                        } else {
+                                            errorMsg = msg
+                                        }
+                                    }
+                                }
+                                .padding(vertical = 11.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            BasicText(if (isSubmitting) "提交中..." else "确认修改密码", style = TextStyle(color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold))
+                        }
+
+                        Box(
+                            Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(SecondaryButtonBg)
+                                .clickable { showChangePasswordDialog = false }
+                                .padding(vertical = 11.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            BasicText("取消", style = TextStyle(color = TextInk, fontSize = 12.sp, fontWeight = FontWeight.Medium))
+                        }
+                    }
+                }
+            }
+        }
+
+        // 11. Edit Profile Modal
+        if (showEditProfileDialog) {
+            var newNickname by remember { mutableStateOf(user.nickname) }
+            var newEmail by remember { mutableStateOf(user.email) }
+            var isSubmitting by remember { mutableStateOf(false) }
+            var errorMsg by remember { mutableStateOf<String?>(null) }
+
+            UserModal(
+                title = "✏️ 修改个人资料",
+                onDismiss = { showEditProfileDialog = false }
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    BasicText("用户昵称 *", style = TextStyle(color = TextMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold))
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(InputBoxBg)
+                            .border(1.dp, BorderColor, RoundedCornerShape(10.dp))
+                            .padding(10.dp)
+                    ) {
+                        BasicTextField(
+                            value = newNickname,
+                            onValueChange = { newNickname = it },
+                            textStyle = TextStyle(color = TextInk, fontSize = 12.sp),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+
+                    BasicText("联系邮箱", style = TextStyle(color = TextMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold))
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(InputBoxBg)
+                            .border(1.dp, BorderColor, RoundedCornerShape(10.dp))
+                            .padding(10.dp)
+                    ) {
+                        BasicTextField(
+                            value = newEmail,
+                            onValueChange = { newEmail = it },
+                            textStyle = TextStyle(color = TextInk, fontSize = 12.sp),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+
+                    errorMsg?.let { err ->
+                        BasicText(err, style = TextStyle(color = PrimaryRed, fontSize = 11.sp))
+                    }
+
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Box(
+                            Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(TagTeal)
+                                .clickable(enabled = !isSubmitting) {
+                                    if (newNickname.isBlank()) {
+                                        errorMsg = "昵称不能为空"
+                                        return@clickable
+                                    }
+                                    isSubmitting = true
+                                    errorMsg = null
+                                    coroutineScope.launch {
+                                        val ok = InterviewApi.updateUserProfile(newNickname, newEmail)
+                                        isSubmitting = false
+                                        if (ok) {
+                                            cacheToast = "资料更新成功！"
+                                            showEditProfileDialog = false
+                                        } else {
+                                            errorMsg = "更新失败，请重试"
+                                        }
+                                    }
+                                }
+                                .padding(vertical = 11.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            BasicText(if (isSubmitting) "保存中..." else "保存个人资料", style = TextStyle(color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold))
+                        }
+
+                        Box(
+                            Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(SecondaryButtonBg)
+                                .clickable { showEditProfileDialog = false }
+                                .padding(vertical = 11.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            BasicText("取消", style = TextStyle(color = TextInk, fontSize = 12.sp, fontWeight = FontWeight.Medium))
+                        }
                     }
                 }
             }
