@@ -11,7 +11,10 @@ android/app/build/
 android/local.properties
 android/.idea/
 android/captures/
+# APK 安装包产物（仅存放在 GitHub Releases，不入源代码库）
+*.apk
 *.apk.idsig
+dist/*.apk
 
 # apk-kotlin 构建产物
 apk-kotlin/.gradle/

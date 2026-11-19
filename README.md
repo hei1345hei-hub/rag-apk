@@ -6,15 +6,16 @@
 
 ---
 
-## 一、APK 直接下载与安装
+## 一、APK 下载与安装
 
-可以直接前往 [GitHub Releases v2.0.0](https://github.com/hei1345hei-hub/rag-apk/releases/tag/v2.0.0) 下载，或使用仓库中已编译签名的安装包：
+APK 安装包统一在 **GitHub Releases** 托管分发（源码仓库保持纯代码轻量化）：
 
-| 下载入口 | 文件名 / 说明 | 架构 |
-|---|---|---|
-| [GitHub Releases v2.0.0](https://github.com/hei1345hei-hub/rag-apk/releases/tag/v2.0.0) | `Java-Interview-System-v2.0.0.apk` (12.6MB) | **v2.0 纯原生 Jetpack Compose + Kyant 液态玻璃** |
-| [`Java面试系统.apk`](./Java面试系统.apk) | 仓库直链下载 (12.6MB) | 同上 |
-| [`dist/Java面试系统.apk`](./dist/Java面试系统.apk) | 镜像分发版 | 同上 |
+👉 **[前往 GitHub Releases v2.0.0 页面下载 APK](https://github.com/hei1345hei-hub/rag-apk/releases/tag/v2.0.0)**
+
+| 发布版本 | 附件下载 | 文件大小 | 架构特性 |
+|---|---|---|---|
+| **v2.0.0** (最新版) | [`Java-Interview-System-v2.0.0.apk`](https://github.com/hei1345hei-hub/rag-apk/releases/download/v2.0.0/Java-Interview-System-v2.0.0.apk) | 12.0 MB | **纯原生 Jetpack Compose + Kyant 液态玻璃 + 知识库解析** |
+| **v2.0.0** (英文命名) | [`rag-interview-2.0.0.apk`](https://github.com/hei1345hei-hub/rag-apk/releases/download/v2.0.0/rag-interview-2.0.0.apk) | 12.0 MB | 英文镜像包 |
 
 直接安装到 Android 手机（Android 8.0+，支持 Android 13/14 120Hz 高刷）即可即开即用。
 
@@ -42,14 +43,11 @@
 
 ```text
 rag-apk/
-├── Java面试系统.apk          # 最新编译完成的 12.6MB 纯原生安装包
 ├── apk-kotlin/               # ★ v2.0 纯原生 Kotlin Multiplatform + Compose 工程
 │   ├── androidApp/           # Android 宿主与清单配置
 │   ├── app/                  # 纯原生业务代码 (InterviewApp, KnowledgeScreen, Chat, etc.)
 │   └── backdrop/             # Kyant Backdrop 纯原生 AGSL 液态玻璃着色器模块
 ├── APK_FRONTEND_DEV_RECORD.md # 原生重构与功能演进技术日志
-├── dist/                     # 分发产物目录
-│   └── Java面试系统.apk
 └── (android, pages, etc.)    # v1.0 历史混合架构源码归档
 ```
 
