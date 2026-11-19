@@ -12,3 +12,13 @@ android/local.properties
 android/.idea/
 android/captures/
 *.apk.idsig
+
+# apk-kotlin 构建产物
+apk-kotlin/.gradle/
+apk-kotlin/.kotlin/
+apk-kotlin/**/build/
+apk-kotlin/local.properties
+apk-kotlin/.idea/
+apk-kotlin/androidApp/release/
+xcuserdata/
+*.xcuserstate

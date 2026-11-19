@@ -1,63 +1,73 @@
 # 基于 RAG 的 Java 面试系统 · 移动端 (Android APK)
 
-本工程为原 Web 面试系统的 Android 客户端。整体架构为 **Vue 3 + Vite 构建的单文件 H5**，运行在自研的**原生 WebView 壳**内（Kotlin），由 `build_apk_final.py` 一键编译打包 APK。原有 Java 后端微服务网关架构未做任何修改。
+本工程为原 Web 面试系统的 Android 客户端。包含最新 **v2.0 纯原生架构 (Kotlin Multiplatform + Jetpack Compose + Kyant Backdrop 原生 AGSL 着色器)** 以及历史 **v1.0 混合架构 (Vue 3 + 原生 WebView 壳)**。原有 Java 后端微服务网关架构未做任何修改。
 
-当前版本：**v1.0.4（versionCode 104）**
+当前推荐版本：**v2.0.0（纯原生 Compose + 液态玻璃 + 完整知识库文档解析与切片）**
 
 ---
 
-## 一、APK 下载
+## 一、APK 直接下载与安装
 
-前往 [GitHub Releases](https://github.com/hei1345hei-hub/rag-apk/releases) 下载最新安装包：
+可以直接使用仓库中已编译签名的安装包安装到 Android 手机：
 
-| 版本 | 文件 | 说明 |
+| 文件 | 说明 | 架构 |
 |---|---|---|
-| v1.0.4 | `rag-interview-1.0.4.apk` | 液态玻璃导航 + 热更新支持 |
+| [`Java面试系统.apk`](./Java面试系统.apk) | 最新发布版 (12.6MB) | **v2.0 纯原生 Jetpack Compose + Kyant 液态玻璃** |
+| [`dist/Java面试系统.apk`](./dist/Java面试系统.apk) | 镜像分发版 | 同上 |
 
-直接安装到 Android 手机（Android 5.0+）即可使用。
-
----
-
-## 二、系统特性
-
-### 1. 液态玻璃底部导航（核心特性）
-
-参照 [Kyant0/AndroidLiquidGlass](https://github.com/Kyant0/AndroidLiquidGlass) 与 [SukiSU-Ultra](https://github.com/ShirkNeko/SukiSU-Ultra) 的 FloatingBottomBar 实现的三层玻璃导航：
-
-- **录制层**：页面内容固定于视口、内部滚动，保证折射位移图坐标与导航真实位置对齐；
-- **玻璃层**：`backdrop-filter: blur(4px) saturate(155%)` 做 vibrancy + blur，SVG `feDisplacementMap` 滤镜对胶囊边缘做真实镜头折射与色散；
-- **指示器层**：56dp 高光玻璃胶囊，支持**按住拖动**、松手吸附最近 Tab，按压时带果冻形变与内阴影；
-- 图标层永远在折射之上，保证可读性。
-
-### 2. 完整功能移植
-
-- 📊 **总览大盘 (Dashboard)**：文档量、切片量、题库量、面试场次、平均分、分类分布图、最近面试记录。
-- 💬 **智能问答 (Chat / RAG)**：RAG 知识库问答（原文切片引用、相似度评分）与 AI 日常对话双模式，多会话管理。
-- 🎯 **模拟面试考场 (Interview Room)**：定制岗位、难度、方向与轮数；AI 面试官动态深度追问与多维即时评分。
-- 📈 **能力评估报告 (Report)**：环形总分、纯 SVG 动态雷达图、优势短板诊断、逐题答卷明细。
-- 📚 **题库自测 (Question Bank)**：分类滑动检索、难度筛选、随机抽题卡片自测、自定义题目录入。
-- 📁 **文档知识库 (Knowledge)**：文档状态监控、切片预览、重新解析、本地上传（`.md` / `.pdf`）。
-- ⚙️ **个人中心 (User)**：管理员/普通用户切换、修改密码、App 内动态切换与测试后端 IP。
+直接安装到 Android 手机（Android 8.0+，支持 Android 13/14 120Hz 高刷）即可即开即用。
 
 ---
 
-## 三、构建方式
+## 二、系统特性 (v2.0 纯原生版)
 
-### 前端：Vite 单文件构建
+### 1. 极致 Kyant 液态玻璃底部导航（AGSL 硬件着色器）
+* **真·物理折射与色散**：基于 Google Android 13+ AGSL 原生 RuntimeShader，动态模拟物理凹凸透镜光路折射（Lens Refraction）与色散（Chromatic Aberration）。
+* **零延迟双向联动**：采用 `HorizontalPager` 与 `targetPage` 实时预测落点同步算法，手指左右划动翻页瞬间底部滑块同频滑行，到达目标页毫无滞后与顿挫。
+* **暖黄琥珀高光**：针对 Java 面试系统专属调校的 `#E59819` 琥珀暖黄果冻质感，支持随手指轻甩按压形变与双层柔光阴影。
 
-```bash
-npx vite build
+### 2. 对标 PC 网页端全量功能移植
+* 📊 **总览大盘 (Dashboard)**：文档量、切片量、题库量、面试场次、平均分、分类雷达与近期面试卡片。
+* 💬 **智能问答 (Chat / RAG)**：知识库混合检索问答（带高亮命中切片引用与置信度评分）与 AI 日常会话多会话切换。
+* 🎯 **模拟面试考场 (Interview Room)**：自定义岗位、难度、技术栈与轮数；AI 考官实时深度追问与多维即时评分。
+* 📈 **能力评估报告 (Report)**：雷达能力多边形、优劣势诊断、逐题答卷明细与建议。
+* 📚 **题库自测 (Question Bank)**：多维度分类与难度检索、抽题自测卡片、录入自定义题目。
+* 📁 **文档知识库 (Knowledge)**：全面对标网页端知识库，包含分类统计、文档列表监控、切片预览弹窗（Chunk Inspection）、重新解析（Reparse）、文档删除、本地文档上传（支持 Markdown / 模板文本解析）。
+* ⚙️ **个人中心 (User)**：登录/登出状态管理、候选人档案、动态测试与切换云端后端服务地址。
+
+---
+
+## 三、工程结构与构建方式
+
+```text
+rag-apk/
+├── Java面试系统.apk          # 最新编译完成的 12.6MB 纯原生安装包
+├── apk-kotlin/               # ★ v2.0 纯原生 Kotlin Multiplatform + Compose 工程
+│   ├── androidApp/           # Android 宿主与清单配置
+│   ├── app/                  # 纯原生业务代码 (InterviewApp, KnowledgeScreen, Chat, etc.)
+│   └── backdrop/             # Kyant Backdrop 纯原生 AGSL 液态玻璃着色器模块
+├── APK_FRONTEND_DEV_RECORD.md # 原生重构与功能演进技术日志
+├── dist/                     # 分发产物目录
+│   └── Java面试系统.apk
+└── (android, pages, etc.)    # v1.0 历史混合架构源码归档
 ```
 
-产物为 `dist/index.html` —— 所有 JS/CSS 内联的**单文件页面**（约 380KB），由原生壳在 `shouldInterceptRequest` 中本地返回，实现同源加载、无 CORS 限制。
+### 纯原生构建 (推荐)
 
-### 原生壳与打包：build_apk_final.py
-
-无需 Gradle / Android Studio，脚本直接调用 Android SDK 工具链（aapt2 / d8 / zipalign / apksigner）编译 Kotlin 源码并签名打包：
+进入 `apk-kotlin` 目录直接使用 Gradle 编译：
 
 ```bash
-python build_apk_final.py
+cd apk-kotlin
+.\gradlew.bat :androidApp:assembleDebug
 ```
+
+编译产物位于 `apk-kotlin/androidApp/build/outputs/apk/debug/androidApp-debug.apk`。
+
+---
+
+## 四、云端连接配置
+
+默认自动连接阿里云服务器公网网关：`http://47.98.190.255:81/api`，4G/5G 与任意 Wi-Fi 下均可直连。如需切换本地联调，可在 App 内登录页或个人中心直接无感切换。
 
 - 包名：`com.rag.interview`，minSdk 21 / targetSdk 34
 - 签名：固定 keystore（`keystore/rag-debug.keystore`），保证覆盖安装不换签名
